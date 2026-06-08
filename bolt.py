@@ -10,15 +10,17 @@ _v=lambda s:(s[1]//s[0],int(max(0,s[4]/s[0]-(s[1]/s[0])**2)**.5))
 class bolt:
  __slots__=('_l','_t','_sl')
  _S={"n":0,"e":0,"r":0,"t":150,"b":False,"T":0}
+ _L=_L
+ _P=_P
  def __new__(c,x=None,*a,**k):
-  L=getattr(c,'_L',_L)
+  L=c._L
   if _O or c._S["b"]:return x(*a,**k)if(callable(x)and(a or k))else x if callable(x)else super().__new__(c)
   if callable(x):
    w=c._w(x,x.__name__,L)
    return w(*a,**k)if(a or k)else w
   return super().__new__(c)
  def __init__(s,x="block"):
-  c=s.__class__;s._sl=getattr(c,'_L',_L);P=getattr(c,'_P',_P)
+  c=s.__class__;s._sl=c._L;P=c._P
   s._l=P.get(x,f"layer[{x}]")if isinstance(x,int)else x
  __class_getitem__=lambda c,i:c(i)
  def __call__(s,f):return f if (_O or s._S["b"]) else s._w(f,s._l,s._sl)
@@ -56,7 +58,7 @@ class bolt:
   print(f"🛡️ bolt armed [Epoch: {c._S['e']} | Tripwire: {c._S['r']*100:.1f}% | Tax: {c._S['t']}ns]",file=_W)
  @classmethod
  def register(c,*l):
-  P=getattr(c,'_P',_P)
+  P=c._P
   if l:
    if isinstance(l[0],dict):P.update(l[0])
    else:
@@ -68,12 +70,12 @@ class bolt:
   p=cp.Profile();r=p.runcall(f,*a,**k);s=io.StringIO();ps.Stats(p,stream=s).strip_dirs().sort_stats('cumtime').print_stats(8);print(s.getvalue(),file=_W);return r
  @classmethod
  def stats(c,n=None):
-  L=getattr(c,'_L',_L)
+  L=c._L
   for k,st in({n:L[n]}if n and n in L else L if not n else {}).items():
    a,d=_v(st);print(f"{k:20s} n={st[0]:>5}  μ={_f(a)}  σ={_f(d)}  min={_f(st[2])}  max={_f(st[3])}  total={_f(st[1])}")
  @classmethod
  def pipeline(c):
-  L,P=getattr(c,'_L',_L),getattr(c,'_P',_P)
+  L,P=c._L,c._P
   v={n:l[1]//l[0]for n,l in L.items()if n in P.values()};t,cum=sum(v.values())or 1,0;print("── pipeline ──",file=_W)
   for i in sorted(P):
    n=P[i];st=L.get(n)
@@ -82,7 +84,7 @@ class bolt:
    else:print(f"  [{i:2d}] {n:20s}  —",file=_W)
  @classmethod
  def top(c,n=5):
-  L=getattr(c,'_L',_L)
+  L=c._L
   for k,st in sorted(L.items(),key=lambda x:-x[1][1]//x[1][0])[:n]:a,d=_v(st);print(f"🔥 {k:20s}  μ={_f(a)}  σ={_f(d)}  n={st[0]}")
  @classmethod
  def check(c,n=100000):
@@ -93,4 +95,4 @@ class bolt:
   c._S.update(o_s)
   print(f"⚡ Bolt Tax: {b-r:.1f}ns/call (accuracy: {100*r/b:.1f}%)",file=_W)
   return b-r
- reset=classmethod(lambda c:getattr(c,'_L',_L).clear())
+ reset=classmethod(lambda c:c._L.clear())

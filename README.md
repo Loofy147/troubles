@@ -117,3 +117,27 @@ BOLT_ARM(10000, 0.05, 60); // Epoch, Ratio, Estimated Tax (ns)
 ```rust
 bolt::arm(10000, 0.05, 100); // Epoch, Ratio, Estimated Tax (ns)
 ```
+
+## 🛡️ Forward Security/Coding (FSC) Engine
+
+The FSC engine (`fsc.py`) is a high-performance Reed-Solomon coding implementation designed for both **Error Correction** (recovering corrupted data at known/unknown positions) and **Erasure Coding** (reconstructing missing shards in a himBHsof-$ swarm).
+
+### Architecture
+- **Geometric Projection**: Replaces (C(m, e) \cdot e^3)$ combinatorial brute-force with (m \cdot e^2)$ overdetermined RREF projections in GF(p).
+- **Deterministic Latency**: Achieves sub-millisecond recovery times suitable for real-time media streaming and high-throughput networking.
+- **Unified Manifold**: Both Error Correction and Erasure Coding share optimized linear algebra kernels.
+
+---
+
+## ⚖️ Design Arguments & Trade-offs
+
+### 1. Zero-Latency Bypass vs. Code Readability
+**Bypass**: `BOLT_OFF` environment checks are performed at the entry point of every call. While this adds a few nanoseconds of branch-prediction "tax" to the hot path, it allows the library to return original objects directly, effectively removing the profiling logic from the stack entirely when disabled.
+**Trade-off**: The implementation uses dense, compacted logic to minimize the footprint of this bypass check.
+
+### 2. Constant-Space Statistics vs. Precise History
+**Constant-Space**: Bolt tracks only $, $\Sigma t$, $\Sigma t^2$, $, and $. This ensures (1)$ memory overhead regardless of sample count.
+**Trade-off**: Full latency distributions (e.g., p99 percentiles) cannot be calculated from these metrics. However, the inclusion of Standard Deviation ($\sigma$) provides a sufficient proxy for performance jitter analysis without the memory tax of a sliding buffer or histogram.
+
+### 3. FFI Stability vs. Language Idioms
+Bolt prioritizes a unified telemetry output format (`⚡ Label μ=... σ=...`) across Python, C, and Rust. This ensures that architectural pipelines spanning multiple FFI boundaries can be analyzed as a single, coherent stream of execution.
