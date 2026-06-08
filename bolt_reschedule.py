@@ -1,4 +1,4 @@
-import re, json, concurrent.futures as cf, urllib.request as ur, sys, time, threading
+import re, json, concurrent.futures as cf, urllib.request as ur, time, collections
 from bolt import bolt
 
 S = [
@@ -7,53 +7,78 @@ S = [
     ("https://raw.githubusercontent.com/n0shake/Public-APIs/master/README.md", "md")
 ]
 
-bolt.register("fetch", "parse", "check")
+# Register with explicit names used in methods
+bolt.register("collect", "predict", "broadcast", "reschedule", "loop")
 
-@bolt
-def fetch(u):
-    try:
-        with ur.urlopen(u, timeout=5) as r: return r.read().decode('utf-8')
-    except: return ""
+class Lib:
+    class C:
+        _c = {}
+        @staticmethod
+        @bolt("collect")
+        def get(u, t=5):
+            if u not in Lib.C._c or time.time()-Lib.C._c[u]['t'] > 60:
+                try:
+                    req = ur.Request(u, method="HEAD" if "raw" not in u else "GET")
+                    with ur.urlopen(req, timeout=t) as r:
+                        Lib.C._c[u] = {'s': r.status, 'h': dict(r.headers), 't': time.time(), 'd': r.read() if "raw" in u else b""}
+                except: Lib.C._c[u] = {'s': 0, 'h': {}, 't': time.time(), 'd': b""}
+            return Lib.C._c[u]
 
-@bolt
-def parse(t, m):
-    if not t: return []
-    if m == "json": return [e["Link"] for e in json.loads(t).get("entries", []) if "Link" in e]
-    return re.findall(r'\|\s*\[.*?\]\((.*?)\)', t)
+    class P:
+        st = {"health": 0.5, "lat": 1.0, "needs": 100}
+        @staticmethod
+        @bolt("predict")
+        def run(batch):
+            h = sum(1 for r in batch if 200<=r['s']<400) / (len(batch) or 1)
+            l = sum(r.get('l', 1.0) for r in batch) / (len(batch) or 1)
+            Lib.P.st["health"] = Lib.P.st["health"]*0.7 + h*0.3
+            Lib.P.st["lat"] = Lib.P.st["lat"]*0.7 + l*0.3
+            Lib.P.st["needs"] = int(100 + (1 - Lib.P.st["health"]) * 900)
+            return Lib.P.st
 
-_c = 0
-_lock = threading.Lock()
+    class B:
+        @staticmethod
+        @bolt("broadcast")
+        def emit(st):
+            print(f"📡 [ENTENT] H:{st['health']:.1%} | L:{st['lat']:.2f}s | Next_Window:{st['needs']}pkts")
 
-@bolt
-def check(u):
-    global _c
-    try:
-        req = ur.Request(u, method="HEAD")
-        with ur.urlopen(req, timeout=3) as r: res = (u, r.status)
-    except: res = (u, 0)
-    with _lock:
-        _c += 1
-        if _c % 100 == 0: print(f"▓", end="", flush=True)
-    return res
+    class R:
+        @staticmethod
+        @bolt("reschedule")
+        def flow(apis, st):
+            size = min(len(apis), st["needs"])
+            return apis[:size]
+
+@bolt("loop")
+def cycle_task(apis):
+    target = Lib.R.flow(apis, Lib.P.st)
+    with cf.ThreadPoolExecutor(50) as ex:
+        def probe(u):
+            start = time.perf_counter()
+            res = Lib.C.get(u, t=3)
+            res['l'] = time.perf_counter() - start
+            return res
+        batch = list(ex.map(probe, target))
+    Lib.B.emit(Lib.P.run(batch))
 
 def run():
-    # Use a higher ratio to prevent premature tripwire trigger on fast network tasks
     bolt.arm(e=10000, r=0.5, t=150)
-    with cf.ThreadPoolExecutor(40) as ex:
-        raw = list(ex.map(lambda x: (fetch(x[0]), x[1]), S))
-        apis = list({u for t, m in raw for u in parse(t, m) if u.startswith("http")})
+    print("⚡ BOLT ENHANCED M:N FLOW ACTIVE")
+    raw = [Lib.C.get(s[0]) for s in S]
+    apis = []
+    for i, r in enumerate(raw):
+        t = r['d'].decode('utf-8', 'ignore')
+        if S[i][1] == "json": apis.extend([e["Link"] for e in json.loads(t or "{}").get("entries", []) if "Link" in e])
+        else: apis.extend(re.findall(r'\|\s*\[.*?\]\((.*?)\)', t or ""))
+    apis = list(set(u for u in apis if u.startswith("http")))
 
-        print(f"📦 Total unique APIs: {len(apis)}")
-        print(f"⚡ Rescheduling ALL APIs: [", end="")
+    for c in range(5):
+        print(f"Cycle {c+1:02d} | ", end="")
+        cycle_task(apis)
+        time.sleep(1)
 
-        results = list(ex.map(check, apis))
-        print("] Done.")
-        ok = sum(1 for _, s in results if 200 <= s < 400)
-        print(f"✅ {ok}/{len(apis)} online.")
-
-    print("\n── BOLT PERFORMANCE ──")
+    print("\n── BOLT PIPELINE OBSERVABILITY ──")
     bolt.stats()
-    bolt.top(3)
     bolt.pipeline()
 
 if __name__ == "__main__": run()
