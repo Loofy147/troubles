@@ -6,41 +6,39 @@ Performance-obsessed, ultra-compact profiling toolkit for Python, C, and Rust.
 
 - **Multi-Language**: Native high-performance implementations for Python, C, and Rust.
 - **Zero-Latency Bypass**: Production modes for near-zero runtime overhead.
-- **Architectural Mapping**: Maps bottlenecks to system layers via `bolt.register()`.
-- **Cloned Isolation**: Independent state management for cloned or nested utility usage.
 - **High-Precision Stats**: Mean (μ) and Standard Deviation (σ) with nanosecond resolution.
+- **O(1) C Lookup**: Hash-based label lookup in C for scalable performance.
+- **Zero-Allocation Rust**: Uses `Cow<'static, str>` for zero-heap static labels.
+- **Self-Diagnostics**: Integrated `check()` methods to measure profiling tax.
 
 ## Python
 ```python
 from bolt import bolt
-bolt.register("db", "logic")
-
-with bolt[0]: # architectural layer
-    ...
-
-@bolt("custom") # labeled decorator
-def fn(): ...
-
-bolt.pipeline() # bottleneck report
-bolt.stats()     # global summary
+bolt.check() # measures profiling overhead
+with bolt[0]: ...
 ```
 
-## Nested & Cloned Usage
-Bolt ⚡ supports independent isolation if the module is cloned. This allows nested profiling without state collision:
-```python
-import bolt, bolt_copy
-@bolt.bolt("outer")
-@bolt_copy.bolt("inner")
-def task(): ...
+## C (Header-only)
+```c
+#include "bolt.h"
+BOLT_CHECK(); // measures overhead
+BOLT("io", { ... });
 ```
 
-## Design & Benchmarks
+## Rust
+```rust
+use bolt::bolt;
+bolt::check(); // measures overhead
+bolt!("compute", { ... });
+```
 
-| Language | Overhead/Call | Footprint | Memory |
-|----------|---------------|-----------|--------|
-| Python   | ~1.6µs        | ~3KB      | O(1)   |
-| C        | ~26ns         | Header    | O(1)   |
-| Rust     | ~30ns         | Module    | O(1)   |
+## Performance Validation (Next-Level Benchmarks)
+
+| Language | Profiling Tax | Architecture | Precision |
+|----------|---------------|--------------|-----------|
+| Python   | ~4.8µs        | Streamlined  | ns        |
+| C        | ~66ns         | O(1) Hash    | ns        |
+| Rust     | ~106ns        | Zero-Alloc   | ns        |
 
 ### Production Bypass
 - **Python**: `BOLT_OFF=1`

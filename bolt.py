@@ -6,13 +6,14 @@ try:
  if b:_W=open(b,"a",1)
 except:pass
 _f=lambda n:f"{n}ns"if n<1e3 else f"{n/1e3:.1f}µs"if n<1e6 else f"{n/1e6:.1f}ms"if n<1e9 else f"{n/1e9:.3f}s"
-_v=lambda s: (s[1]//s[0], int(max(0,s[4]/s[0]-(s[1]/s[0])**2)**.5))
+_v=lambda s:(s[1]//s[0],int(max(0,s[4]/s[0]-(s[1]/s[0])**2)**.5))
 def _e(n,v,L):
- if n not in L:L[n]=[1,v,v,v,v*v];print(f"⚡ {n}  {_f(v)}",file=_W)
- else:
-  s=L[n];s[0]+=1;s[1]+=v;s[4]+=v*v;s[2]=min(s[2],v);s[3]=max(s[3],v);m=s[0]
-  if m in{2,5,10,50,100}or m%100==0:
-   a,d=_v(s);print(f"⚡ {n}  ×{m}  μ={_f(a)}  σ={_f(d)}  [{_f(s[2])}…{_f(s[3])}]",file=_W)
+ s=L.get(n)
+ if s:
+  s[0]+=1;s[1]+=v;s[4]+=v*v
+  if v<s[2]:s[2]=v
+  elif v>s[3]:s[3]=v
+ else:L[n]=[1,v,v,v,v*v];print(f"⚡ {n}  {_f(v)}",file=_W)
 def _w(f,n,L):
  @rw(f)
  def w(*a,**k):t=_T();r=f(*a,**k);_e(n,_T()-t,L);return r
@@ -40,7 +41,8 @@ class bolt:
   if l:
    if isinstance(l[0],dict):P.update(l[0])
    else:
-    for i,n in(l if isinstance(l[0],(list,tuple))else enumerate(l)):P[i]=n
+    it=l if isinstance(l[0],(list,tuple))else enumerate(l)
+    for i,n in it:P[i]=n
  @classmethod
  def deep(c,f,*a,**k):
   if _O:return f(*a,**k)
@@ -62,6 +64,12 @@ class bolt:
  @classmethod
  def top(c,n=5):
   L=getattr(c,'_L',_L)
-  for k,s in sorted(L.items(),key=lambda x:-x[1][1]//x[1][0])[:n]:a,d=_v(s);print(f"🔥 {k:20s}  μ={_f(a)}  σ={_f(d)}  n={s[0]}",file=_W)
+  for k,s in sorted(L.items(),key=lambda x:-x[1][1]//x[1][0])[:n]:a,d=_v(s);print(f"🔥 {k:20s}  μ={_f(a)}  σ={_f(d)}  n={s[0]}")
  @classmethod
- def reset(c):getattr(c,'_L',_L).clear()
+ def check(c,n=100000):
+  def f():pass
+  t=_T();[f()for _ in range(n)];r=(_T()-t)/n
+  t=_T();[c(f)()for _ in range(n)];b=(_T()-t)/n
+  print(f"⚡ Bolt Tax: {b-r:.1f}ns/call (accuracy: {100*r/b:.1f}%)",file=_W)
+  return b-r
+ reset=classmethod(lambda c:getattr(c,'_L',_L).clear())
