@@ -1,5 +1,5 @@
 import time,sys,subprocess as sp,cProfile as cp,pstats as ps,io,os;from functools import wraps as rw
-_L,_T,_P,_O={},time.perf_counter_ns,{},os.getenv("BOLT_OFF")in{"1","true"}
+_L,_T,_P,_O={},time.perf_counter_ns,{},os.getenv("BOLT_OFF")in{"1","true","TRUE"}
 _W=sys.stderr
 try:
  b=os.getenv("BOLT_OUT")
@@ -7,34 +7,15 @@ try:
 except:pass
 _f=lambda n:f"{n}ns"if n<1e3 else f"{n/1e3:.1f}µs"if n<1e6 else f"{n/1e6:.1f}ms"if n<1e9 else f"{n/1e9:.3f}s"
 _v=lambda s:(s[1]//s[0],int(max(0,s[4]/s[0]-(s[1]/s[0])**2)**.5))
-def _e(n,v,L):
- try:
-  s=L[n]
-  s[0]+=1;s[1]+=v;s[4]+=v*v
-  if v<s[2]:s[2]=v
-  if v>s[3]:s[3]=v
- except KeyError:L[n]=[1,v,v,v,v*v];print(f"⚡ {n}  {_f(v)}",file=_W)
-def _w(f,n,L):
- if n not in L:L[n]=[0,0,2**63,0,0]
- s=L[n]
- @rw(f)
- def w(*a,**k):
-  t=_T();r=f(*a,**k);v=_T()-t
-  if not s[0]:print(f"⚡ {n}  {_f(v)}",file=_W)
-  s[0]+=1;s[1]+=v;s[4]+=v*v
-  if v<s[2]:s[2]=v
-  if v>s[3]:s[3]=v
-  return r
- return w
-class bolt:
- __slots__=('_l','_t','_sl','_s')
 class bolt:
  __slots__=('_l','_t','_sl')
  _S={"n":0,"e":0,"r":0,"t":150,"b":False,"T":0}
  def __new__(c,x=None,*a,**k):
   L=getattr(c,'_L',_L)
   if _O or c._S["b"]:return x(*a,**k)if(callable(x)and(a or k))else x if callable(x)else super().__new__(c)
-  if callable(x):return c._w(x,x.__name__,L)(*a,**k)if(a or k)else c._w(x,x.__name__,L)
+  if callable(x):
+   w=c._w(x,x.__name__,L)
+   return w(*a,**k)if(a or k)else w
   return super().__new__(c)
  def __init__(s,x="block"):
   c=s.__class__;s._sl=getattr(c,'_L',_L);P=getattr(c,'_P',_P)
@@ -42,35 +23,19 @@ class bolt:
  __class_getitem__=lambda c,i:c(i)
  def __call__(s,f):return f if (_O or s._S["b"]) else s._w(f,s._l,s._sl)
  def __enter__(s):
-  if not _O:
-   s._t=_T()
-   if s._l not in s._sl:s._sl[s._l]=[0,0,2**63,0,0]
-   s._s=s._sl[s._l]
-  return s
- def __exit__(s,*_):
-  if not _O:
-   v,st=_T()-s._t,s._s
-   if not st[0]:print(f"⚡ {s._l}  {_f(v)}",file=_W)
-   st[0]+=1;st[1]+=v;st[4]+=v*v
-   if v<st[2]:st[2]=v
-   if v>st[3]:st[3]=v
-  if not (_O or s._S["b"]):s._t=_T()
+  if not _O:s._t=_T()
   return s
  def __exit__(s,*_):
   if not (_O or s._S["b"]):s._e(s._l,_T()-s._t,s._sl)
  @classmethod
  def _e(c,n,v,L):
-  s=c._S
-  if s["b"]:return
-  s["n"]+=1;s["T"]+=v
-  if s["e"] and s["n"]>=s["e"]:
-   L.clear();s["n"]=s["T"]=0;print("⚡ Bolt Epoch Reset",file=_W)
-  if s["r"] and s["n"]%1000==0:
+  s=c._S;s["n"]+=1;s["T"]+=v
+  if s["e"]and s["n"]>=s["e"]:L.clear();s["n"]=s["T"]=0;print("⚡ Bolt Epoch Reset",file=_W)
+  if s["r"]and s["n"]%1000==0:
    o=s["n"]*s["t"]
-   if o/(o+s["T"] or 1)>s["r"]:s["b"]=True;print(f"⚠️ [bolt.TRIPWIRE] '{n}' overhead exceeded {s['r']*100:.1f}%. Telemetry disengaged.",file=_W)
+   if o/(o+s["T"]or 1)>s["r"]:s["b"]=True;print(f"⚠️ [bolt.TRIPWIRE] '{n}' overhead exceeded {s['r']*100:.1f}%. Telemetry disengaged.",file=_W)
   try:
-   st=L[n]
-   st[0]+=1;st[1]+=v;st[4]+=v*v
+   st=L[n];st[0]+=1;st[1]+=v;st[4]+=v*v
    if v<st[2]:st[2]=v
    elif v>st[3]:st[3]=v
   except KeyError:L[n]=[1,v,v,v,v*v];print(f"⚡ {n}  {_f(v)}",file=_W)
@@ -122,8 +87,10 @@ class bolt:
  @classmethod
  def check(c,n=100000):
   def f():pass
+  o_s=c._S.copy();c._S.update({"e":0,"r":0,"n":0,"T":0,"b":False})
   t=_T();[f()for _ in range(n)];r=(_T()-t)/n
   t=_T();[c(f)()for _ in range(n)];b=(_T()-t)/n
+  c._S.update(o_s)
   print(f"⚡ Bolt Tax: {b-r:.1f}ns/call (accuracy: {100*r/b:.1f}%)",file=_W)
   return b-r
  reset=classmethod(lambda c:getattr(c,'_L',_L).clear())
