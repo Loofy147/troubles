@@ -1,43 +1,42 @@
 # ⚡ Bolt
 
-A performance-obsessed, compact, and adaptive profiling utility with rolling statistics and deep diagnostics.
+A performance-obsessed, robust profiling utility with advanced precision statistics and zero-latency bypass.
 
 ## Features
 
-- **Decorator**: Profile functions with `@bolt` or `@bolt("label")`.
-- **Context Manager**: Profile specific blocks with `with bolt("label"):`.
-- **Rolling Statistics**: Automatically tracks min, max, and average execution times for repeated tasks without unbounded memory growth.
-- **Deep Profiling**: Use `bolt.deep(fn)` for full `cProfile` integration.
-- **Precision**: Uses `time.perf_counter_ns` for high-resolution timing.
-- **CLI Shim**: Profile shell commands directly.
+- **Precision Stats**: Tracks mean (μ) and standard deviation (σ) for repeated tasks.
+- **Hotspot Ranking**: Rank slow functions by mean execution time with `bolt.top()`.
+- **Zero-Overhead Bypass**: Toggle with `BOLT_OFF=1` for production safety.
+- **Custom Sinks**: Redirect metrics to a file with `BOLT_OUT=path/to/log`.
+- **Deep Profiling**: Full `cProfile` integration via `bolt.deep(fn)`.
+- **Compact API**: Supports decorators, context managers, and direct calls.
 
 ## Usage
 
-### Decorators
+### High-Precision Tracking
 ```python
 from bolt import bolt
 
 @bolt
-def fast_task():
+def repeat_task():
     ...
 
-@bolt("custom_label")
-def another_task():
-    ...
-```
-
-### Deep Profiling & Stats
-```python
-from bolt import bolt
-
-# Detailed cProfile report
-bolt.deep(my_function, arg1, kwarg=1)
-
-# Summary report of all timed tasks
+# After many runs, metrics will show μ and σ
 bolt.stats()
 ```
 
-### CLI
+### Hotspot Identification
+```python
+# Shows top 5 slowest tasks by mean time
+bolt.top(n=5)
+```
+
+### Custom Output Sink
 ```bash
-python3 bolt.py sleep 1
+BOLT_OUT=performance.log python3 my_app.py
+```
+
+### Production Bypass
+```bash
+BOLT_OFF=1 python3 my_app.py  # Utility disappears from runtime
 ```
