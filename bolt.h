@@ -11,8 +11,8 @@
 #else
 typedef struct{char n[32];long c,t,m,x;double s;} _B;static _B _l[128];static int _n=0;
 static inline void _e(const char* n,long v){
- unsigned int h=0;const char* p=n;while(*p)h=h*33+*p++;int i=h%128,o=i;
- while(_l[i].n[0]&&strcmp(_l[i].n,n)){i=(i+1)%128;if(i==o)return;}
+ unsigned int h=0;const char* p=n;while(*p)h=h*33+*p++;int i=h&127,o=i;
+ while(_l[i].n[0]&&strcmp(_l[i].n,n)){i=(i+1)&127;if(i==o)return;}
  _B* s=&_l[i];if(!s->n[0]){strncpy(s->n,n,31);s->m=v;s->x=v;_n++;}
  s->c++;s->t+=v;s->s+=(double)v*v;if(v<s->m)s->m=v;if(v>s->x)s->x=v;
 }

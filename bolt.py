@@ -12,14 +12,22 @@ def _e(n,v,L):
   s=L[n]
   s[0]+=1;s[1]+=v;s[4]+=v*v
   if v<s[2]:s[2]=v
-  elif v>s[3]:s[3]=v
+  if v>s[3]:s[3]=v
  except KeyError:L[n]=[1,v,v,v,v*v];print(f"⚡ {n}  {_f(v)}",file=_W)
 def _w(f,n,L):
+ if n not in L:L[n]=[0,0,2**63,0,0]
+ s=L[n]
  @rw(f)
- def w(*a,**k):t=_T();r=f(*a,**k);_e(n,_T()-t,L);return r
+ def w(*a,**k):
+  t=_T();r=f(*a,**k);v=_T()-t
+  if not s[0]:print(f"⚡ {n}  {_f(v)}",file=_W)
+  s[0]+=1;s[1]+=v;s[4]+=v*v
+  if v<s[2]:s[2]=v
+  if v>s[3]:s[3]=v
+  return r
  return w
 class bolt:
- __slots__=('_l','_t','_sl')
+ __slots__=('_l','_t','_sl','_s')
  def __new__(c,x=None,*a,**k):
   L=getattr(c,'_L',_L)
   if _O:return x(*a,**k)if(callable(x)and(a or k))else x if callable(x)else super().__new__(c)
@@ -31,10 +39,18 @@ class bolt:
  __class_getitem__=lambda c,i:c(i)
  def __call__(s,f):return f if _O else _w(f,s._l,s._sl)
  def __enter__(s):
-  if not _O:s._t=_T()
+  if not _O:
+   s._t=_T()
+   if s._l not in s._sl:s._sl[s._l]=[0,0,2**63,0,0]
+   s._s=s._sl[s._l]
   return s
  def __exit__(s,*_):
-  if not _O:_e(s._l,_T()-s._t,s._sl)
+  if not _O:
+   v,st=_T()-s._t,s._s
+   if not st[0]:print(f"⚡ {s._l}  {_f(v)}",file=_W)
+   st[0]+=1;st[1]+=v;st[4]+=v*v
+   if v<st[2]:st[2]=v
+   if v>st[3]:st[3]=v
  @classmethod
  def register(c,*l):
   P=getattr(c,'_P',_P)
