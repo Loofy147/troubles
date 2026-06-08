@@ -90,3 +90,30 @@ BOLT_STATS();
 bolt!("core", { compute(); });
 bolt::stats();
 ```
+
+## Production Safety (The "Tripwire" & "Epoch")
+
+Bolt includes built-in safeties to prevent telemetry from becoming a bottleneck under production-level traffic.
+
+### ⚡ Automated Tripwire
+If the internal "Bolt Tax" (overhead) exceeds a configurable percentage of the task execution time, Bolt will automatically pull the rip-cord and globally bypass all profiling logic. This ensures that a degraded node never crashes or overflows buffers due to telemetry overhead.
+
+### 🔄 Sliding Epoch Window
+To prevent historical metrics from stagnating, Bolt can be configured with an Epoch limit. After reaching $N$ samples, the metrics are reset (or soft-reset depending on implementation), providing a sliding window view of performance.
+
+### Usage
+
+**Python**
+```python
+bolt.arm(e=10000, r=0.05) # 10k samples epoch, 5% max overhead tripwire
+```
+
+**C**
+```c
+BOLT_ARM(10000, 0.05, 60); // Epoch, Ratio, Estimated Tax (ns)
+```
+
+**Rust**
+```rust
+bolt::arm(10000, 0.05, 100); // Epoch, Ratio, Estimated Tax (ns)
+```
