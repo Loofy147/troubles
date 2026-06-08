@@ -2,45 +2,91 @@
 
 Performance-obsessed, ultra-compact profiling toolkit for Python, C, and Rust.
 
-## Features
+## Technical Architecture
 
-- **Multi-Language**: Native high-performance implementations for Python, C, and Rust.
-- **Zero-Latency Bypass**: Production modes for near-zero runtime overhead.
-- **High-Precision Stats**: Mean (μ) and Standard Deviation (σ) with nanosecond resolution.
-- **O(1) C Lookup**: Hash-based label lookup in C for scalable performance.
-- **Zero-Allocation Rust**: Uses `Cow<'static, str>` for zero-heap static labels.
-- **Self-Diagnostics**: Integrated `check()` methods to measure profiling tax.
+```mermaid
+graph TD
+    User([User Code]) --> B{Bolt Interface}
+    B -- Decorator/Macro --> T[Timing Logic]
+    B -- Context Manager --> T
+    B -- Direct Call --> T
 
-## Python
+    T --> P{Bypass Active?}
+    P -- Yes (BOLT_OFF) --> O[Return Original]
+    P -- No --> M[Measure Latency]
+
+    M --> S[(Constant Space Stats)]
+    S --> D{Diagnostics}
+    D --> Deep[cProfile/Deep]
+    D --> Stats[μ, σ Aggregation]
+    D --> Pipe[Pipeline Mapping]
+
+## Logic & Dispatcher Flow
+
+Bolt uses a multi-pattern dispatcher to adapt to various usage scenarios with minimal friction.
+
+```mermaid
+flowchart LR
+    A[bolt class/macro] --> B{Input Type}
+    B -- Callable --> C{Args Present?}
+    C -- No --> D[Decorator/Wrapper]
+    C -- Yes --> E[Immediate Execution]
+    B -- Str/Int --> F[Context Manager/Indexed Layer]
+
+    subgraph "Internal State (O(1))"
+    G[Count n]
+    H[Total Time Σ]
+    I[Sum of Squares Σ²]
+    J[Min/Max]
+    end
+
+    D & E & F --> M[Timing Start]
+    M --> Task[Run Task]
+    Task --> Z[Timing End]
+    Z --> G & H & I & J
+```
+
+## Multi-Language Reference
+
+| Feature | Python (`bolt.py`) | C (`bolt.h`) | Rust (`bolt.rs`) |
+|---------|--------------------|---------------|-------------------|
+| **Core**| Class-based | Macro-based | RAII-based |
+| **Precision** | `perf_counter_ns` | `clock_gettime` | `Instant::now()` |
+| **Lookup** | Dict (Hybrid State) | O(1) Additive Hash | OnceLock/Mutex HashMap |
+| **Labels** | Dynamic Str/Int | Static Char[32] | Cow<'static, str> |
+| **Bypass** | `BOLT_OFF` Env | `#define BOLT_OFF` | `cfg(bolt_off)` |
+
+## Formulas
+
+- **Mean (μ)**: $\Sigma / n$
+- **Standard Deviation (σ)**: $\sqrt{\Sigma^2/n - (\Sigma/n)^2}$
+
+## Benchmarks (10^7$ iterations)
+
+- **C**: ~66ns overhead
+- **Rust**: ~106ns overhead
+- **Python**: ~4.8µs overhead (1.6µs per raw call wrapper)
+
+---
+
+### Usage Examples
+
+#### Pipeline Mapping (Python)
 ```python
-from bolt import bolt
-bolt.check() # measures profiling overhead
-with bolt[0]: ...
+bolt.register("input", "logic", "output")
+with bolt[1]: # Profile as "logic"
+    process()
+bolt.pipeline()
 ```
 
-## C (Header-only)
+#### Header-only (C)
 ```c
-#include "bolt.h"
-BOLT_CHECK(); // measures overhead
-BOLT("io", { ... });
+BOLT("task", { heavy_compute(); });
+BOLT_STATS();
 ```
 
-## Rust
+#### Zero-Allocation (Rust)
 ```rust
-use bolt::bolt;
-bolt::check(); // measures overhead
-bolt!("compute", { ... });
+bolt!("core", { compute(); });
+bolt::stats();
 ```
-
-## Performance Validation (Next-Level Benchmarks)
-
-| Language | Profiling Tax | Architecture | Precision |
-|----------|---------------|--------------|-----------|
-| Python   | ~4.8µs        | Streamlined  | ns        |
-| C        | ~66ns         | O(1) Hash    | ns        |
-| Rust     | ~106ns        | Zero-Alloc   | ns        |
-
-### Production Bypass
-- **Python**: `BOLT_OFF=1`
-- **C**: `#define BOLT_OFF`
-- **Rust**: `#[cfg(feature = "bolt_off")]`
