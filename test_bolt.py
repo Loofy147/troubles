@@ -1,36 +1,59 @@
-import time
-import io
-import contextlib
-from bolt import bolt
+import time, io, contextlib, sys
+from bolt import bolt, _log
 
 @bolt
-def decorated_func(n):
-    return sum(i*i for i in range(n))
+def fast_fn(): pass
 
-def normal_func(n):
-    return sum(i*i for i in range(n))
+@bolt("custom")
+def custom_fn(): pass
+
+def normal_fn():
+    time.sleep(0.01)
 
 if __name__ == "__main__":
-    f = io.StringIO()
-    with contextlib.redirect_stderr(f):
-        print("Testing @bolt decorator...")
-        res = decorated_func(10**5)
-        assert res == sum(i*i for i in range(10**5))
+    err = io.StringIO()
+    out = io.StringIO()
+    with contextlib.redirect_stderr(err), contextlib.redirect_stdout(out):
+        print("Testing rolling stats...")
+        for _ in range(5):
+            fast_fn()
 
-        print("Testing direct bolt call...")
-        res = bolt(normal_func, 10**5)
-        assert res == sum(i*i for i in range(10**5))
+        print("Testing custom label decorator...")
+        custom_fn()
 
         print("Testing context manager...")
-        with bolt("custom_block"):
-            time.sleep(0.05)
+        with bolt("block"):
+            normal_fn()
 
-    output = f.getvalue()
-    print("\nCaptured stderr output:")
-    print(output)
+        print("Testing deep profiling...")
+        bolt.deep(normal_fn)
 
-    assert "decorated_func" in output
-    assert "normal_func" in output
-    assert "custom_block" in output
+        print("\nFinal Stats Report:")
+        bolt.stats()
+
+    stderr_out = err.getvalue()
+    stdout_out = out.getvalue()
+
+    print("\nCaptured Stderr:", file=sys.stderr)
+    print(stderr_out, file=sys.stderr)
+
+    print("\nCaptured Stdout:")
+    print(stdout_out)
+
+    # Assertions
+    assert "fast_fn  ×2" in stderr_out
+    assert "fast_fn  ×5" in stderr_out
+    assert "custom" in stderr_out
+    assert "block" in stderr_out
+    assert "normal_fn" in stderr_out # from deep profiling
+
+    # Verify stats output
+    assert "fast_fn" in stdout_out
+    assert "n=    5" in stdout_out
+
+    # Verify memory efficiency: _log should have 3 entries (fast_fn, custom, block)
+    assert len(_log) == 3
+    for key in _log:
+        assert len(_log[key]) == 4 # [n, sum, min, max]
 
     print("\nAll tests passed!")

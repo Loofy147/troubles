@@ -1,30 +1,66 @@
-import time, sys, subprocess as sp
+import time, sys, subprocess as sp, cProfile, pstats, io
 from functools import wraps
 
+_log = {} # name -> [n, sum_ns, min_ns, max_ns]
+_T = time.perf_counter_ns
+
+def _fmt(ns):
+    if ns < 1000: return f"{ns}ns"
+    if ns < 1000000: return f"{ns/1000:.1f}µs"
+    if ns < 1000000000: return f"{ns/1000000:.1f}ms"
+    return f"{ns/1000000000:.3f}s"
+
+def _emit(name, ns):
+    if name not in _log:
+        _log[name] = [1, ns, ns, ns]
+        print(f"⚡ {name}  {_fmt(ns)}", file=sys.stderr)
+    else:
+        s = _log[name]
+        s[0] += 1; s[1] += ns
+        if ns < s[2]: s[2] = ns
+        if ns > s[3]: s[3] = ns
+        n = s[0]
+        if n in {2, 5, 10, 50, 100} or n % 100 == 0:
+            print(f"⚡ {name}  ×{n}  μ={_fmt(s[1]//n)}  [{_fmt(s[2])}…{_fmt(s[3])}]", file=sys.stderr)
+
 class bolt:
-    """@bolt | with bolt('x'): | bolt(fn,*a,**k) | CLI shim"""
+    """@bolt | @bolt('l') | with bolt('l'): | bolt(fn,*a,**k) | CLI shim"""
     __slots__ = ('_l', '_t')
 
-    def __new__(cls, f=None, *a, **k):
-        if callable(f) and not a and not k:           # @bolt → transparent wrap
-            @wraps(f)
-            def w(*a, **k): return cls._tick(f, *a, **k)
+    def __new__(cls, x=None, *a, **k):
+        if callable(x) and not a and not k:
+            @wraps(x)
+            def w(*a,**k): t=_T(); r=x(*a,**k); _emit(x.__name__, _T()-t); return r
             return w
-        if callable(f): return cls._tick(f, *a, **k)  # bolt(fn,...) → timed call
-        return super().__new__(cls)                    # with bolt('x'): → ctx
+        if callable(x):
+            t=_T(); r=x(*a,**k); _emit(getattr(x,'__name__','fn'), _T()-t); return r
+        return super().__new__(cls)
 
-    def __init__(self, label="block"):
-        if isinstance(label, str): self._l, self._t = label, 0
+    def __init__(self, x="block"): self._l = x
 
-    def __enter__(self): self._t = time.perf_counter(); return self
-    def __exit__(self, *_):
-        print(f"{self._l} {time.perf_counter()-self._t:.4f}s", file=sys.stderr)
+    def __call__(self, f):
+        @wraps(f)
+        def w(*a,**k): t=_T(); r=f(*a,**k); _emit(self._l, _T()-t); return r
+        return w
+
+    def __enter__(self): self._t = _T(); return self
+    def __exit__(self, *_): _emit(self._l, _T()-self._t)
 
     @staticmethod
-    def _tick(f, *a, **k):
-        s = time.perf_counter(); r = f(*a, **k)
-        print(f"{getattr(f,'__name__','fn')} {time.perf_counter()-s:.4f}s", file=sys.stderr)
-        return r
+    def deep(f, *a, top=8, **k):
+        pr = cProfile.Profile(); r = pr.runcall(f, *a, **k); s = io.StringIO()
+        pstats.Stats(pr, stream=s).strip_dirs().sort_stats('cumtime').print_stats(top)
+        print(s.getvalue(), file=sys.stderr); return r
+
+    @staticmethod
+    def stats(name=None):
+        for n, s in ({name:_log[name]} if name else _log).items():
+            print(f"{n:20s} n={s[0]:>5}  total={_fmt(s[1])}  μ={_fmt(s[1]//s[0])}  "
+                  f"min={_fmt(s[2])}  max={_fmt(s[3])}")
+
+    @staticmethod
+    def reset(): _log.clear()
 
 if __name__ == "__main__":
-    sys.argv[1:] and bolt(sp.run, sys.argv[1:])
+    if len(sys.argv) > 1:
+        t = _T(); r = sp.run(sys.argv[1:]); _emit("run", _T()-t)

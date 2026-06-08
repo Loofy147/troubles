@@ -1,42 +1,43 @@
 # ⚡ Bolt
 
-A performance-obsessed, compact, and adaptive profiling utility.
+A performance-obsessed, compact, and adaptive profiling utility with rolling statistics and deep diagnostics.
 
 ## Features
 
-- **Decorator**: Easy profiling of functions.
-- **Context Manager**: Profile specific blocks of code.
-- **Direct Call**: Profile any callable on the fly.
-- **CLI Shim**: Profile shell commands directly from your terminal.
+- **Decorator**: Profile functions with `@bolt` or `@bolt("label")`.
+- **Context Manager**: Profile specific blocks with `with bolt("label"):`.
+- **Rolling Statistics**: Automatically tracks min, max, and average execution times for repeated tasks without unbounded memory growth.
+- **Deep Profiling**: Use `bolt.deep(fn)` for full `cProfile` integration.
+- **Precision**: Uses `time.perf_counter_ns` for high-resolution timing.
+- **CLI Shim**: Profile shell commands directly.
 
 ## Usage
 
-### As a decorator
+### Decorators
 ```python
 from bolt import bolt
 
 @bolt
-def my_function():
+def fast_task():
+    ...
+
+@bolt("custom_label")
+def another_task():
     ...
 ```
 
-### As a context manager
+### Deep Profiling & Stats
 ```python
 from bolt import bolt
 
-with bolt("heavy_lifting"):
-    # Code to profile
-    ...
+# Detailed cProfile report
+bolt.deep(my_function, arg1, kwarg=1)
+
+# Summary report of all timed tasks
+bolt.stats()
 ```
 
-### As a direct call
-```python
-from bolt import bolt
-
-result = bolt(my_function, *args, **kwargs)
-```
-
-### From CLI
+### CLI
 ```bash
 python3 bolt.py sleep 1
 ```
