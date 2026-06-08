@@ -1,48 +1,45 @@
 # ⚡ Bolt
 
-A performance-obsessed, compact profiling utility with pipeline architectural mapping and zero-latency bypass.
+Performance-obsessed, compact profiling utility with pipeline architectural mapping and zero-latency bypass.
 
-## Features
+## Design Arguments
 
-- **Pipeline Mapping**: Register architectural layers with `bolt.register()` and visualize bottlenecks with `bolt.pipeline()`.
-- **Index Access**: Access registered layers via `bolt[idx]` syntax.
-- **Precision Stats**: Tracks mean (μ) and standard deviation (σ) for all tasks.
-- **Hotspot Ranking**: Identify slow functions with `bolt.top()`.
-- **Zero-Overhead Bypass**: Toggle with `BOLT_OFF=1` for production safety.
-- **Custom Sinks**: Redirect metrics to a file with `BOLT_OUT=path`.
+- **Zero-Latency Bypass**: Robust `BOLT_OFF` mode returns original functions directly, avoiding any wrapper overhead in production.
+- **Constant Memory Stats**: Tracks min, max, mean (μ), and standard deviation (σ) using fixed-space accumulators.
+- **Architectural Mapping**: Maps performance bottlenecks to system layers via `bolt.register()` and `bolt[idx]`.
+- **Extreme Compaction**: Integrated diagnostics (deep profiling, statistics, ranking) in a minimal physical footprint (~3KB).
+
+## Trade-offs
+
+- **Readability vs. Compactness**: The source is optimized for density, utilizing aggressive module aliasing and one-liners.
+- **Fixed-Space Stats**: We trade individual sample history for O(1) space complexity.
+- **Dispatcher Heuristics**: Direct `bolt(fn)` calls without arguments are interpreted as decorator wrappers to favor the most common usage pattern.
 
 ## Usage
 
-### Layer Registration & Pipelines
+### Pipeline Mapping
 ```python
 from bolt import bolt
+bolt.register("input", "logic", "output")
 
-# Register architectural layers
-bolt.register("db_fetch", "logic", "serialize")
-
-# Use index-based profiling
-with bolt[0]:  # Profiles as "db_fetch"
+with bolt[0]:  # Profiles as "input"
     ...
 
-@bolt[1]  # Profiles as "logic"
-def process_data():
-    ...
-
-# Visualize the pipeline flow
-bolt.pipeline()
+bolt.pipeline() # Bottleneck visualization
 ```
 
-### Output
-```text
-── pipeline ──
-  [ 0] db_fetch             μ=45.2ms  σ=2.1ms  40%  cum=45.2ms
-  [ 1] logic                μ=56.8ms  σ=5.4ms  50%  cum=102.0ms
-  [ 2] serialize            μ=11.3ms  σ=0.5ms  10%  cum=113.3ms
-```
-
-### Global Stats & Deep Profiling
+### Precision Statistics
 ```python
+@bolt("heavy_task")
+def task(): ...
+
+# Shows μ, σ, min, max, total
 bolt.stats()
-bolt.top(n=5)
-bolt.deep(heavy_fn)
+```
+
+### CLI & Environment
+```bash
+BOLT_OUT=perf.log python3 app.py  # Redirect to file
+BOLT_OFF=1 python3 app.py        # Complete bypass
+python3 bolt.py sleep 1          # CLI shim
 ```
