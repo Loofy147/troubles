@@ -1,46 +1,45 @@
 # ⚡ Bolt
 
-Performance-obsessed, compact profiling utility with pipeline architectural mapping and zero-latency bypass.
+Performance-obsessed, ultra-compact profiling toolkit for Python, C, and Rust.
 
-## Design Arguments
+## Features
 
-- **Zero-Latency Bypass**: Robust `BOLT_OFF` mode returns original functions directly, avoiding any wrapper overhead in production.
-- **Constant Memory Stats**: Tracks min, max, mean (μ), and standard deviation (σ) using fixed-space accumulators.
-- **Architectural Mapping**: Maps performance bottlenecks to system layers via `bolt.register()` and `bolt[idx]`.
-- **Extreme Compaction**: Integrated diagnostics (deep profiling, statistics, ranking) in a minimal physical footprint (~3KB).
+- **Multi-Language**: Native high-performance implementations for Python, C, and Rust.
+- **Zero-Latency Bypass**: Production modes for near-zero runtime overhead.
+- **High-Precision Stats**: Mean (μ) and Standard Deviation (σ) with nanosecond resolution.
+- **Constant Memory**: Tracks millions of events in O(1) space per label.
 
-## Stress Test Benchmarks
-
-- **Throughput**: Verified at 10^6+ iterations.
-- **Memory Overhead**: Constant O(1) space complexity per tracked label.
-- **Profiling Tax**: Approximately 1.6µs per decorated call (Python 3.12).
-- **Accuracy**: Reliable μ and σ calculation for high-jitter workloads.
-
-## Usage
-
-### Pipeline Mapping
+## Python
 ```python
 from bolt import bolt
-bolt.register("input", "logic", "output")
-
-with bolt[0]:  # Profiles as "input"
+with bolt("logic"):
     ...
-
-bolt.pipeline() # Bottleneck visualization
-```
-
-### Precision Statistics
-```python
-@bolt("heavy_task")
-def task(): ...
-
-# Shows μ, σ, min, max, total
 bolt.stats()
 ```
 
-### CLI & Environment
-```bash
-BOLT_OUT=perf.log python3 app.py  # Redirect to file
-BOLT_OFF=1 python3 app.py        # Complete bypass
-python3 bolt.py sleep 1          # CLI shim
+## C (Header-only)
+```c
+#include "bolt.h"
+BOLT("io", { read_file(); });
+BOLT_STATS();
 ```
+
+## Rust
+```rust
+use bolt::bolt;
+bolt!("compute", { matrix_multiply(); });
+bolt::stats();
+```
+
+## Design & Benchmarks
+
+| Language | Overhead/Call | Footprint | Memory |
+|----------|---------------|-----------|--------|
+| Python   | ~1.6µs        | ~3KB      | O(1)   |
+| C        | ~26ns         | Header    | O(1)   |
+| Rust     | ~30ns         | Module    | O(1)   |
+
+### Production Bypass
+- **Python**: `BOLT_OFF=1`
+- **C**: `#define BOLT_OFF`
+- **Rust**: `#[cfg(feature = "bolt_off")]`
