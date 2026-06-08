@@ -1,4 +1,4 @@
-import re, json, concurrent.futures as cf, urllib.request as ur, sys, time
+import re, json, concurrent.futures as cf, urllib.request as ur, sys, time, threading
 from bolt import bolt
 
 S = [
@@ -21,28 +21,39 @@ def parse(t, m):
     if m == "json": return [e["Link"] for e in json.loads(t).get("entries", []) if "Link" in e]
     return re.findall(r'\|\s*\[.*?\]\((.*?)\)', t)
 
+_c = 0
+_lock = threading.Lock()
+
 @bolt
 def check(u):
+    global _c
     try:
         req = ur.Request(u, method="HEAD")
-        with ur.urlopen(req, timeout=2) as r: return u, r.status
-    except: return u, 0
+        with ur.urlopen(req, timeout=3) as r: res = (u, r.status)
+    except: res = (u, 0)
+    with _lock:
+        _c += 1
+        if _c % 100 == 0: print(f"▓", end="", flush=True)
+    return res
 
 def run():
-    bolt.arm(e=500, r=0.05)
-    with cf.ThreadPoolExecutor(16) as ex:
+    # Use a higher ratio to prevent premature tripwire trigger on fast network tasks
+    bolt.arm(e=10000, r=0.5, t=150)
+    with cf.ThreadPoolExecutor(40) as ex:
         raw = list(ex.map(lambda x: (fetch(x[0]), x[1]), S))
-        apis = {u for t, m in raw for u in parse(t, m) if u.startswith("http")}
+        apis = list({u for t, m in raw for u in parse(t, m) if u.startswith("http")})
 
         print(f"📦 Total unique APIs: {len(apis)}")
-        sample = list(apis)[:50] # Check 50 for a solid performance profile
-        print(f"⚡ Rescheduling (health check) {len(sample)} APIs...")
+        print(f"⚡ Rescheduling ALL APIs: [", end="")
 
-        results = list(ex.map(check, sample))
+        results = list(ex.map(check, apis))
+        print("] Done.")
         ok = sum(1 for _, s in results if 200 <= s < 400)
-        print(f"✅ {ok}/{len(sample)} online.")
+        print(f"✅ {ok}/{len(apis)} online.")
 
-    print("\n── BOLT PERFORMANCE STATS ──")
+    print("\n── BOLT PERFORMANCE ──")
     bolt.stats()
+    bolt.top(3)
+    bolt.pipeline()
 
 if __name__ == "__main__": run()
