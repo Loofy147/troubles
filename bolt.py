@@ -8,12 +8,12 @@ except:pass
 _f=lambda n:f"{n}ns"if n<1e3 else f"{n/1e3:.1f}µs"if n<1e6 else f"{n/1e6:.1f}ms"if n<1e9 else f"{n/1e9:.3f}s"
 _v=lambda s:(s[1]//s[0],int(max(0,s[4]/s[0]-(s[1]/s[0])**2)**.5))
 def _e(n,v,L):
- s=L.get(n)
- if s:
+ try:
+  s=L[n]
   s[0]+=1;s[1]+=v;s[4]+=v*v
   if v<s[2]:s[2]=v
   elif v>s[3]:s[3]=v
- else:L[n]=[1,v,v,v,v*v];print(f"⚡ {n}  {_f(v)}",file=_W)
+ except KeyError:L[n]=[1,v,v,v,v*v];print(f"⚡ {n}  {_f(v)}",file=_W)
 def _w(f,n,L):
  @rw(f)
  def w(*a,**k):t=_T();r=f(*a,**k);_e(n,_T()-t,L);return r
