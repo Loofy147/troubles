@@ -1,20 +1,36 @@
 import time
+import io
+import contextlib
 from bolt import bolt
 
-def test_cpu_bound(n):
+@bolt
+def decorated_func(n):
     return sum(i*i for i in range(n))
 
-def test_io_bound(s):
-    time.sleep(s)
-    return "done"
+def normal_func(n):
+    return sum(i*i for i in range(n))
 
 if __name__ == "__main__":
-    print("Testing CPU bound...")
-    res_cpu = bolt(test_cpu_bound, 10**6)
-    assert res_cpu == sum(i*i for i in range(10**6))
+    f = io.StringIO()
+    with contextlib.redirect_stderr(f):
+        print("Testing @bolt decorator...")
+        res = decorated_func(10**5)
+        assert res == sum(i*i for i in range(10**5))
 
-    print("\nTesting IO bound...")
-    res_io = bolt(test_io_bound, 0.1)
-    assert res_io == "done"
+        print("Testing direct bolt call...")
+        res = bolt(normal_func, 10**5)
+        assert res == sum(i*i for i in range(10**5))
+
+        print("Testing context manager...")
+        with bolt("custom_block"):
+            time.sleep(0.05)
+
+    output = f.getvalue()
+    print("\nCaptured stderr output:")
+    print(output)
+
+    assert "decorated_func" in output
+    assert "normal_func" in output
+    assert "custom_block" in output
 
     print("\nAll tests passed!")
