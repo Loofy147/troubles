@@ -1,31 +1,6 @@
-use std::time::Instant;
-
-// ── Bolt Integration (Minimal RAII) ──────────────────────────────────
-static mut STATS: Option<Vec<(String, u64, u64)>> = None;
-
-struct Bolt(String, Instant);
-impl Bolt {
-    fn new(label: &str) -> Self { Bolt(label.to_string(), Instant::now()) }
-}
-impl Drop for Bolt {
-    fn drop(&mut self) {
-        let dur = self.1.elapsed().as_nanos() as u64;
-        unsafe {
-            if STATS.is_none() { STATS = Some(Vec::new()); }
-            if let Some(ref mut v) = STATS {
-                if let Some(entry) = v.iter_mut().find(|e| e.0 == self.0) {
-                    entry.1 += 1; entry.2 += dur;
-                } else {
-                    v.push((self.0.clone(), 1, dur));
-                }
-            }
-        }
-    }
-}
-
-// ── Finite Field Kernels ──────────────────────────────────────────────
 const P: i64 = 251;
 
+#[inline(always)]
 fn gf_inv(n: i64) -> i64 {
     let mut t = 0; let mut new_t = 1;
     let mut r = P; let mut new_r = n % P;
@@ -39,73 +14,117 @@ fn gf_inv(n: i64) -> i64 {
     t
 }
 
-pub fn gf_gauss(a: &[i64], b: &[i64], k: usize) -> Option<Vec<i64>> {
-    let _g = Bolt::new("GF Solve Rust");
-    let mut m = vec![0i64; k * (k + 1)];
+#[inline(always)]
+fn gf_invert(a: &[i64], k: usize, inv_out: &mut [i64]) -> bool {
+    let mut m = vec![0i64; k * 2 * k];
     for r in 0..k {
-        for c in 0..k { m[r * (k + 1) + c] = a[r * k + c] % P; }
-        m[r * (k + 1) + k] = b[r] % P;
+        for c in 0..k { m[r * 2 * k + c] = a[r * k + c]; }
+        m[r * 2 * k + k + r] = 1;
     }
 
     for r in 0..k {
         let mut pivot = r;
-        while pivot < k && m[pivot * (k + 1) + r] == 0 { pivot += 1; }
-        if pivot == k { return None; }
+        while pivot < k && m[pivot * 2 * k + r] == 0 { pivot += 1; }
+        if pivot == k { return false; }
         if pivot != r {
-            for i in 0..=k {
-                let tmp = m[r * (k + 1) + i];
-                m[r * (k + 1) + i] = m[pivot * (k + 1) + i];
-                m[pivot * (k + 1) + i] = tmp;
+            for i in 0..2*k {
+                let tmp = m[r * 2 * k + i];
+                m[r * 2 * k + i] = m[pivot * 2 * k + i];
+                m[pivot * 2 * k + i] = tmp;
             }
         }
 
-        let inv = gf_inv(m[r * (k + 1) + r]);
-        for i in r..=k { m[r * (k + 1) + i] = (m[r * (k + 1) + i] * inv) % P; }
+        let inv = gf_inv(m[r * 2 * k + r]);
+        if inv == -1 { return false; }
+        for i in r..2*k { m[r * 2 * k + i] = (m[r * 2 * k + i] * inv) % P; }
 
         for row in 0..k {
             if row != r {
-                let factor = m[row * (k + 1) + r];
-                for i in r..=k {
-                    m[row * (k + 1) + i] = (m[row * (k + 1) + i] - factor * m[r * (k + 1) + i]) % P;
-                    if m[row * (k + 1) + i] < 0 { m[row * (k + 1) + i] += P; }
+                let factor = m[row * 2 * k + r];
+                if factor == 0 { continue; }
+                for i in r..2*k {
+                    m[row * 2 * k + i] = (m[row * 2 * k + i] - factor * m[r * 2 * k + i]) % P;
+                    if m[row * 2 * k + i] < 0 { m[row * 2 * k + i] += P; }
                 }
             }
         }
     }
 
-    let mut res = vec![0i64; k];
-    for i in 0..k { res[i] = m[i * (k + 1) + k]; }
-    Some(res)
+    for r in 0..k {
+        for c in 0..k {
+            inv_out[r * k + c] = m[r * 2 * k + k + c];
+        }
+    }
+    true
 }
 
-// ── Swarm Benchmark ──────────────────────────────────────────────────
-fn main() {
-    let k = 8;
-    let n_iters = 100_000;
+#[no_mangle]
+pub extern "C" fn fsc_vertical_solve(
+    a_ptr: *const i64,
+    shards_ptr: *const u8,
+    k: usize,
+    payload_len: usize,
+    out_ptr: *mut u8
+) -> i32 {
+    let a = unsafe { std::slice::from_raw_parts(a_ptr, k * k) };
+    let shards = unsafe { std::slice::from_raw_parts(shards_ptr, k * payload_len) };
+    let out = unsafe { std::slice::from_raw_parts_mut(out_ptr, k * payload_len) };
 
-    // Example K=8 square matrix and vector
-    let a = vec![1, 2, 3, 4, 5, 6, 7, 8,
-                 1, 4, 9, 16, 25, 36, 49, 64,
-                 1, 8, 27, 64, 125, 216, 343, 512,
-                 1, 16, 81, 256, 625, 1296, 2401, 4096,
-                 1, 32, 243, 1024, 3125, 7776, 16807, 32768,
-                 1, 64, 729, 4096, 15625, 46656, 117649, 262144,
-                 1, 128, 2187, 16384, 78125, 279936, 823543, 2097152,
-                 1, 256, 6561, 65536, 390625, 1679616, 5764801, 16777216];
-    let b = vec![42, 137, 201, 7, 88, 255, 0, 127];
+    let mut inv = vec![0i64; k * k];
+    if !gf_invert(a, k, &mut inv) { return 0; }
 
-    println!("⚡ Benchmarking Rust FSC Kernel (K={}, iterations={})", k, n_iters);
-    let start = Instant::now();
-    for _ in 0..n_iters {
-        gf_gauss(&a, &b, k);
-    }
-    let total = start.elapsed();
-
-    unsafe {
-        if let Some(ref v) = STATS {
-            for (label, n, t) in v {
-                println!("  {:<16} n={:<10} μ={:.1}ns total={:?}", label, n, (*t as f64) / (*n as f64), total);
+    for byte_idx in 0..payload_len {
+        for i in 0..k {
+            let mut sum = 0i64;
+            for j in 0..k {
+                sum += inv[i * k + j] * shards[j * payload_len + byte_idx] as i64;
             }
+            out[i * payload_len + byte_idx] = (sum % P) as u8;
         }
+    }
+    1
+}
+
+#[no_mangle]
+pub extern "C" fn fsc_vertical_encode(
+    g_ptr: *const i64,
+    data_ptr: *const u8,
+    k: usize,
+    n: usize,
+    payload_len: usize,
+    out_ptr: *mut u8
+) {
+    let g = unsafe { std::slice::from_raw_parts(g_ptr, n * k) };
+    let data = unsafe { std::slice::from_raw_parts(data_ptr, k * payload_len) };
+    let out = unsafe { std::slice::from_raw_parts_mut(out_ptr, n * payload_len) };
+
+    for byte_idx in 0..payload_len {
+        for i in 0..n {
+            let mut sum = 0i64;
+            for j in 0..k {
+                sum += g[i * k + j] * data[j * payload_len + byte_idx] as i64;
+            }
+            out[i * payload_len + byte_idx] = (sum % P) as u8;
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn fsc_gf_gauss(a: *const i64, b: *const i64, k: usize, out: *mut i64) -> i32 {
+    let a_slice = unsafe { std::slice::from_raw_parts(a, k * k) };
+    let b_slice = unsafe { std::slice::from_raw_parts(b, k) };
+    let mut inv = vec![0i64; k * k];
+    if gf_invert(a_slice, k, &mut inv) {
+        let out_slice = unsafe { std::slice::from_raw_parts_mut(out, k) };
+        for i in 0..k {
+            let mut sum = 0i64;
+            for j in 0..k {
+                sum = (sum + inv[i * k + j] * b_slice[j]) % P;
+            }
+            out_slice[i] = sum;
+        }
+        1
+    } else {
+        0
     }
 }
