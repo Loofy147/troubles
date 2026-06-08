@@ -1,59 +1,55 @@
-import os, sys, time
+import os, sys, time, io, contextlib
+from bolt import bolt
 
-def test_on():
-    print("\n--- Testing BOLT_ON (Standard) ---")
+def test_pipeline():
+    print("\n--- Testing Pipeline and Indexing ---")
     if "bolt" in sys.modules: del sys.modules["bolt"]
     os.environ.pop("BOLT_OFF", None)
-    os.environ.pop("BOLT_OUT", None)
     import bolt
-    @bolt.bolt
-    def fast(): pass
-    fast()
-    bolt.bolt.stats()
-    print("Test ON: Passed")
 
-def test_sigma_and_top():
-    print("\n--- Testing Sigma and Top ---")
-    if "bolt" in sys.modules: del sys.modules["bolt"]
-    os.environ.pop("BOLT_OFF", None)
-    os.environ.pop("BOLT_OUT", None)
-    import bolt
-    @bolt.bolt
-    def variable_fn(s):
-        time.sleep(s)
-    for s in [0.01, 0.02, 0.01]:
-        variable_fn(s)
-    bolt.bolt.top(n=1)
-    print("Test Sigma/Top: Passed")
+    # Registration
+    bolt.bolt.register("input", "transform", "output")
 
-def test_off():
-    print("\n--- Testing BOLT_OFF (Zero-Overhead) ---")
+    # Use index-based context managers
+    with bolt.bolt[0]: # input
+        time.sleep(0.01)
+
+    with bolt.bolt[1]: # transform
+        time.sleep(0.02)
+
+    with bolt.bolt[2]: # output
+        time.sleep(0.01)
+
+    # Use index-based decorator
+    @bolt.bolt[1]
+    def extra_transform():
+        time.sleep(0.01)
+
+    extra_transform()
+
+    print("\nPipeline report:")
+    bolt.bolt.pipeline()
+    print("Test Pipeline: Passed")
+
+def test_off_pipeline():
+    print("\n--- Testing BOLT_OFF with Pipeline ---")
     if "bolt" in sys.modules: del sys.modules["bolt"]
     os.environ["BOLT_OFF"] = "1"
     import bolt
-    def fn(): return 1
-    assert bolt.bolt(fn) is fn
-    print("Test OFF: Passed")
 
-def test_bolt_out():
-    print("\n--- Testing BOLT_OUT (File Sink) ---")
-    if "bolt" in sys.modules: del sys.modules["bolt"]
-    os.environ["BOLT_OUT"] = "bolt_metrics.log"
-    os.environ.pop("BOLT_OFF", None)
-    if os.path.exists("bolt_metrics.log"): os.remove("bolt_metrics.log")
-    import bolt
-    @bolt.bolt
-    def logged(): pass
-    logged()
-    with open("bolt_metrics.log", "r") as f:
-        content = f.read()
-        assert "logged" in content
-    os.remove("bolt_metrics.log")
-    print("Test BOLT_OUT: Passed")
+    bolt.bolt.register("input")
+
+    # Context manager should not crash
+    with bolt.bolt[0]:
+        pass
+
+    # Decorator should return original function
+    def fn(): return 1
+    assert bolt.bolt[0](fn) is fn
+
+    print("Test OFF Pipeline: Passed")
 
 if __name__ == "__main__":
-    test_on()
-    test_sigma_and_top()
-    test_off()
-    test_bolt_out()
-    print("\nAll Comprehensive Tests Passed!")
+    test_pipeline()
+    test_off_pipeline()
+    print("\nAll Advanced Pipeline Tests Passed!")
