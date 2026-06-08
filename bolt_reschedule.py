@@ -4,96 +4,87 @@ from bolt import bolt
 S = [
     ("https://raw.githubusercontent.com/marcelscruz/public-apis/main/db/resources.json", "json"),
     ("https://raw.githubusercontent.com/public-apis/public-apis/master/README.md", "md"),
-    ("https://raw.githubusercontent.com/n0shake/Public-APIs/master/README.md", "md")
+    ("https://raw.githubusercontent.com/n0shake/Public-APIs/master/README.md", "md"),
+    ("https://raw.githubusercontent.com/cporter202/API-mega-list/main/ai-apis-1208/README.md", "md"),
+    ("https://raw.githubusercontent.com/cporter202/API-mega-list/main/agents-apis-697/README.md", "md")
 ]
 
-bolt.register("collect", "predict", "broadcast", "reschedule", "loop")
+bolt.register("collect", "parse", "consensus", "broadcast")
 
 class Lib:
     class C:
         _c = {}
         @staticmethod
         @bolt("collect")
-        def get(u, t=3):
+        def get(u, t=5):
             if u not in Lib.C._c or time.time()-Lib.C._c[u]['t'] > 300:
                 try:
-                    req = ur.Request(u, method="HEAD" if "raw" not in u else "GET")
-                    with ur.urlopen(req, timeout=t) as r:
-                        Lib.C._c[u] = {'s': r.status, 'h': dict(r.headers), 't': time.time(), 'd': r.read() if "raw" in u else b""}
-                except: Lib.C._c[u] = {'s': 0, 'h': {}, 't': time.time(), 'd': b""}
+                    req = ur.Request(u, method="HEAD")
+                    with ur.urlopen(req, timeout=t) as r: Lib.C._c[u] = {'s': r.status, 't': time.time()}
+                except: Lib.C._c[u] = {'s': 0, 't': time.time()}
             return Lib.C._c[u]
 
+    @staticmethod
+    @bolt("parse")
+    def parse_all(raw_data):
+        apis = []
+        for t, m in raw_data:
+            if m == "json":
+                for e in json.loads(t).get("entries", []):
+                    if "Link" in e: apis.append((e["Link"], e.get("Category", "Misc")))
+            else:
+                cur_cat = "Misc"
+                for line in t.split('\n'):
+                    h = re.match(r'^#+\s+(.*)', line);
+                    if h: cur_cat = h.group(1).strip()
+                    l = re.search(r'\|\s*\[.*?\]\((.*?)\)', line)
+                    if l: apis.append((l.group(1), cur_cat))
+        return apis
+
     class P:
-        st = {"health": 0.5, "lat": 1.0, "needs": 200, "pressure": 0.0}
         @staticmethod
-        @bolt("predict")
+        @bolt("consensus")
         def run(batch):
-            h = sum(1 for r in batch if 200<=r['s']<400) / (len(batch) or 1)
-            l = sum(r.get('l', 1.0) for r in batch) / (len(batch) or 1)
-            Lib.P.st["health"] = Lib.P.st["health"]*0.6 + h*0.4
-            Lib.P.st["lat"] = Lib.P.st["lat"]*0.6 + l*0.4
-            # PRESSURE: combination of dropping health and rising latency
-            Lib.P.st["pressure"] = (1 - Lib.P.st["health"]) * 0.5 + min(1, Lib.P.st["lat"]/10.0) * 0.5
-            Lib.P.st["needs"] = int(100 + Lib.P.st["pressure"] * 900)
-            return Lib.P.st
+            groups = collections.defaultdict(list)
+            for _, cat, s in batch: groups[cat].append(1 if 200<=s<400 else 0)
+            entents = {}
+            for cat, votes in groups.items():
+                voted_up = sum(votes)
+                entents[cat] = {"v": "UP" if voted_up > len(votes)/2 else "DOWN", "c": f"{voted_up}/{len(votes)}"}
+            return entents
 
     class B:
         @staticmethod
         @bolt("broadcast")
-        def emit(st, cycle):
-            print(f"📡 [ENTENT] C:{cycle:02d} | H:{st['health']:.1%} | L:{st['lat']:.2f}s | PRESS:{st['pressure']:.1%} | NEXT:{st['needs']}pkts")
-
-    class R:
-        @staticmethod
-        @bolt("reschedule")
-        def flow(apis, st, cycle):
-            # Sliding window based on predicted needs
-            start = (cycle * 200) % len(apis)
-            size = min(len(apis)-start, st["needs"])
-            return apis[start:start+size]
-
-_prog = 0
-_plock = threading.Lock()
-
-@bolt("loop")
-def cycle_task(apis, cycle):
-    global _prog
-    target = Lib.R.flow(apis, Lib.P.st, cycle)
-    _prog = 0
-    with cf.ThreadPoolExecutor(64) as ex:
-        def probe(u):
-            global _prog
-            start = time.perf_counter()
-            res = Lib.C.get(u, t=2)
-            res['l'] = time.perf_counter() - start
-            with _plock:
-                _prog += 1
-                if _prog % 50 == 0: print("▓", end="", flush=True)
-            return res
-        batch = list(ex.map(probe, target))
-    print("] ", end="")
-    Lib.B.emit(Lib.P.run(batch), cycle)
+        def emit(entents):
+            out = [f"{c}:{v['v']}({v['c']})" for c, v in entents.items()]
+            print(f"📡 [ENTENTS] " + " | ".join(out[:3]) + (f" (+{len(out)-3})" if len(out)>3 else ""))
 
 def run():
-    bolt.arm(e=20000, r=0.5, t=150)
-    print("🚀 BOLT SHOWCASE: DYNAMIC STATE-MACHINE BROADCAST")
-    print("Collecting ecosystem seeds...")
-    raw = [Lib.C.get(s[0]) for s in S]
-    apis = []
-    for i, r in enumerate(raw):
-        t = r['d'].decode('utf-8', 'ignore')
-        if S[i][1] == "json": apis.extend([e["Link"] for e in json.loads(t or "{}").get("entries", []) if "Link" in e])
-        else: apis.extend(re.findall(r'\|\s*\[.*?\]\((.*?)\)', t or ""))
-    apis = list(set(u for u in apis if u.startswith("http")))
-    print(f"📦 Tracking {len(apis)} endpoints.")
+    bolt.arm(e=10000, r=0.5, t=150)
+    print("⚡ BOLT COMPACTED CONSENSUS BROADCASTER (MEGA-LIST INTEGRATED)")
 
-    for c in range(1, 11):
-        print(f"FLOW {c:02d} [", end="", flush=True)
-        cycle_task(apis, c)
-        time.sleep(0.5)
+    raw = []
+    for u, m in S:
+        try:
+            with ur.urlopen(u, timeout=10) as r: raw.append((r.read().decode('utf-8', 'ignore'), m))
+        except: pass
 
-    print("\n── BOLT PIPELINE SHOWCASE ──")
+    apis = Lib.parse_all(raw)
+    print(f"📦 Combined Ecosystem: {len(apis)} nodes.")
+
+    for cycle in range(5):
+        print(f"F{cycle+1:02d} | ", end="", flush=True)
+        window = apis[(cycle*300)%len(apis) : ((cycle+1)*300)%len(apis)]
+        with cf.ThreadPoolExecutor(60) as ex:
+            def probe(item):
+                u, cat = item
+                res = Lib.C.get(u, t=2)
+                return (u, cat, res['s'])
+            batch = list(ex.map(probe, window))
+        Lib.B.emit(Lib.P.run(batch))
+        time.sleep(1)
+
     bolt.stats()
-    bolt.pipeline()
 
 if __name__ == "__main__": run()
