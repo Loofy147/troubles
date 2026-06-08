@@ -1,81 +1,64 @@
-import time,sys,subprocess as sp,cProfile,pstats,io,os;from functools import wraps
-_log,_T,_PIPE={},time.perf_counter_ns,{}
-_OFF=os.getenv("BOLT_OFF") in{"1","true","TRUE"}
-_OUT=sys.stderr
+import time,sys,subprocess as sp,cProfile as cp,pstats as ps,io,os;from functools import wraps as rw
+_L,_T,_P,_O={},time.perf_counter_ns,{},os.getenv("BOLT_OFF")in{"1","true"}
+_W=sys.stderr
 try:
- _BO=os.getenv("BOLT_OUT")
- if _BO:_OUT=open(_BO,"a",1)
+ b=os.getenv("BOLT_OUT")
+ if b:_W=open(b,"a",1)
 except:pass
-def _fmt(ns):
- if ns<1000:return f"{ns}ns"
- if ns<1e6:return f"{ns/1e3:.1f}µs"
- if ns<1e9:return f"{ns/1e6:.1f}ms"
- return f"{ns/1e9:.3f}s"
-def _emit(n,ns):
- if n not in _log:_log[n]=[1,ns,ns,ns,ns*ns];print(f"⚡ {n}  {_fmt(ns)}",file=_OUT)
+_f=lambda n:f"{n}ns"if n<1e3 else f"{n/1e3:.1f}µs"if n<1e6 else f"{n/1e6:.1f}ms"if n<1e9 else f"{n/1e9:.3f}s"
+_sd=lambda s,m:int(max(0,s[4]/m-(s[1]/m)**2)**.5)
+def _e(n,v):
+ if n not in _L:_L[n]=[1,v,v,v,v*v];print(f"⚡ {n}  {_f(v)}",file=_W)
  else:
-  s=_log[n];s[0]+=1;s[1]+=ns;s[4]+=ns*ns
-  if ns<s[2]:s[2]=ns
-  if ns>s[3]:s[3]=ns
-  m=s[0]
-  if m in{2,5,10,50,100} or m%100==0:
-   avg=s[1]//m;sd=int(max(0,s[4]/m-(s[1]/m)**2)**.5)
-   print(f"⚡ {n}  ×{m}  μ={_fmt(avg)}  σ={_fmt(sd)}  [{_fmt(s[2])}…{_fmt(s[3])}]",file=_OUT)
+  s=_L[n];s[0]+=1;s[1]+=v;s[4]+=v*v;s[2]=min(s[2],v);s[3]=max(s[3],v);m=s[0]
+  if m in{2,5,10,50,100}or m%100==0:print(f"⚡ {n}  ×{m}  μ={_f(s[1]//m)}  σ={_f(_sd(s,m))}  [{_f(s[2])}…{_f(s[3])}]",file=_W)
 class bolt:
  __slots__=('_l','_t')
- def __new__(cls,x=None,*a,**k):
-  if _OFF:
-   if callable(x):return x(*a,**k) if(a or k)else x
-   return super().__new__(cls)
-  if callable(x) and not a and not k:
-   @wraps(x)
-   def w(*a,**k):t=_T();r=x(*a,**k);_emit(x.__name__,_T()-t);return r
+ def __new__(c,x=None,*a,**k):
+  if _O:return x(*a,**k)if(callable(x)and(a or k))else x if callable(x)else super().__new__(c)
+  if callable(x)and not a and not k:
+   @rw(x)
+   def w(*a,**k):t=_T();r=x(*a,**k);_e(x.__name__,_T()-t);return r
    return w
-  if callable(x):t=_T();r=x(*a,**k);_emit(getattr(x,'__name__','fn'),_T()-t);return r
-  return super().__new__(cls)
- def __init__(self,x="block"):self._l=_PIPE.get(x,f"layer[{x}]") if isinstance(x,int) else x
- def __class_getitem__(cls,idx):return cls(idx)
- def __call__(self,f):
-  if _OFF:return f
-  @wraps(f)
-  def w(*a,**k):t=_T();r=f(*a,**k);_emit(self._l,_T()-t);return r
+  if callable(x):t=_T();r=x(*a,**k);_e(getattr(x,'__name__','fn'),_T()-t);return r
+  return super().__new__(c)
+ def __init__(s,x="block"):s._l=_P.get(x,f"layer[{x}]")if isinstance(x,int)else x
+ __class_getitem__=lambda c,i:c(i)
+ def __call__(s,f):
+  if _O:return f
+  @rw(f)
+  def w(*a,**k):t=_T();r=f(*a,**k);_e(s._l,_T()-t);return r
   return w
- def __enter__(self):
-  if not _OFF:self._t=_T()
-  return self
- def __exit__(self,*_):
-  if not _OFF:_emit(self._l,_T()-self._t)
+ def __enter__(s):
+  if not _O:s._t=_T()
+  return s
+ def __exit__(s,*_):
+  if not _O:_e(s._l,_T()-s._t)
  @staticmethod
- def register(*layers):
-  if not layers:return
-  if isinstance(layers[0],dict):_PIPE.update(layers[0]);return
-  it=layers if isinstance(layers[0],(list,tuple)) else enumerate(layers)
-  for i,n in it:_PIPE[i]=n
+ def register(*l):
+  if l:
+   if isinstance(l[0],dict):_P.update(l[0])
+   else:
+    for i,n in(l if isinstance(l[0],(list,tuple))else enumerate(l)):_P[i]=n
  @staticmethod
- def deep(f,*a,top=8,**k):
-  if _OFF:return f(*a,**k)
-  pr=cProfile.Profile();r=pr.runcall(f,*a,**k);s=io.StringIO();pstats.Stats(pr,stream=s).strip_dirs().sort_stats('cumtime').print_stats(top);print(s.getvalue(),file=_OUT);return r
+ def deep(f,*a,**k):
+  if _O:return f(*a,**k)
+  p=cp.Profile();r=p.runcall(f,*a,**k);s=io.StringIO();ps.Stats(p,stream=s).strip_dirs().sort_stats('cumtime').print_stats(8);print(s.getvalue(),file=_W);return r
  @staticmethod
  def stats(n=None):
-  for k,s in({n:_log[n]} if n and n in _log else _log if not n else {}).items():
-   avg=s[1]//s[0];sd=int(max(0,s[4]/s[0]-(s[1]/s[0])**2)**.5)
-   print(f"{k:20s} n={s[0]:>5}  μ={_fmt(avg)}  σ={_fmt(sd)}  min={_fmt(s[2])}  max={_fmt(s[3])}  total={_fmt(s[1])}")
+  for k,s in({n:_L[n]}if n and n in _L else _L if not n else {}).items():
+   m=s[0];print(f"{k:20s} n={m:>5}  μ={_f(s[1]//m)}  σ={_f(_sd(s,m))}  min={_f(s[2])}  max={_f(s[3])}  total={_f(s[1])}")
  @staticmethod
  def pipeline():
-  avgs={n:l[1]//l[0] for n,l in _log.items() if n in _PIPE.values()}
-  total=sum(avgs.values()) or 1;cum=0
-  print("── pipeline ──",file=_OUT)
-  for idx in sorted(_PIPE):
-   n=_PIPE[idx];s=_log.get(n)
+  v={n:l[1]//l[0]for n,l in _L.items()if n in _P.values()};t,c=sum(v.values())or 1,0;print("── pipeline ──",file=_W)
+  for i in sorted(_P):
+   n=_P[i];s=_L.get(n)
    if s:
-    avg=avgs[n];cum+=avg;sd=int(max(0,s[4]/s[0]-(s[1]/s[0])**2)**.5)
-    print(f"  [{idx:2d}] {n:20s}  μ={_fmt(avg)}  σ={_fmt(sd)}  {100*avg//total:2d}%  cum={_fmt(cum)}",file=_OUT)
-   else:print(f"  [{idx:2d}] {n:20s}  —",file=_OUT)
+    a=v[n];c+=a;print(f"  [{i:2d}] {n:20s}  μ={_f(a)}  σ={_f(_sd(s,s[0]))}  {100*a//t:2d}%  cum={_f(c)}",file=_W)
+   else:print(f"  [{i:2d}] {n:20s}  —",file=_W)
  @staticmethod
  def top(n=5):
-  for k,s in sorted(_log.items(),key=lambda x:-x[1][1]//x[1][0])[:n]:
-   print(f"🔥 {k:20s}  μ={_fmt(s[1]//s[0])}  n={s[0]}",file=_OUT)
- @staticmethod
- def reset():_log.clear()
+  for k,s in sorted(_L.items(),key=lambda x:-x[1][1]//x[1][0])[:n]:print(f"🔥 {k:20s}  μ={_f(s[1]//s[0])}  n={s[0]}",file=_W)
+ reset=staticmethod(lambda:_L.clear())
 if __name__=="__main__":
- if len(sys.argv)>1:t=_T();sp.run(sys.argv[1:]);_emit("run",_T()-t)
+ if len(sys.argv)>1:t=_T();sp.run(sys.argv[1:]);_e("run",_T()-t)
