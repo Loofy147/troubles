@@ -5,8 +5,8 @@ from fsc import ErasureManifold
 from bolt import bolt
 
 # ── Protocol Definition ───────────────────────────────────────────────
-# [SeqID: Q] [ShardIdx: B] [Payload: 1024s]
-PKT_FMT = ">QB1024s"
+# [SeqID: Q] [ShardIdx: B] [PayloadValue: B]
+PKT_FMT = ">QBB"
 PKT_SIZE = struct.calcsize(PKT_FMT)
 
 bolt.register({
@@ -30,16 +30,12 @@ class IngressProxy(asyncio.DatagramProtocol):
 
     def datagram_received(self, data, addr):
         with bolt[10]:
-            # Simple chunking: split incoming data into K chunks
-            # In a real proxy, this would be a buffer filling up K slots
-            # For the prototype, we treat the 'data' as a block of K bytes for the FF solver
-            # and pad with zeros to K=8.
             vals = list(data[:self.em.K]) + [0]*(self.em.K - len(data))
             shards = self.em.encode(vals)
 
             with bolt[13]:
                 for i, val in enumerate(shards):
-                    pkt = struct.pack(PKT_FMT, self.seq, i, bytes([val]))
+                    pkt = struct.pack(PKT_FMT, self.seq, i, int(val))
                     for peer in self.peer_addrs:
                         self.transport.sendto(pkt, peer)
             self.seq += 1
@@ -58,8 +54,7 @@ class EgressProxy(asyncio.DatagramProtocol):
 
     def datagram_received(self, data, addr):
         with bolt[14]:
-            seq, idx, val_byte = struct.unpack(PKT_FMT, data)
-            val = val_byte[0]
+            seq, idx, val = struct.unpack(PKT_FMT, data)
 
             if seq in self.reconstructed: return
 
@@ -73,7 +68,7 @@ class EgressProxy(asyncio.DatagramProtocol):
                         if sol:
                             self.cb(bytes(sol))
                             self.reconstructed.add(seq)
-                            del self.buffer[seq]
+                            if seq in self.buffer: del self.buffer[seq]
 
 async def start_proxy(local_port, peer_addrs, K=8, N=14, mode='ingress'):
     em = ErasureManifold(K=K, N=N)
@@ -85,7 +80,7 @@ async def start_proxy(local_port, peer_addrs, K=8, N=14, mode='ingress'):
             local_addr=('127.0.0.1', local_port)
         )
     else:
-        def on_data(d): pass # print(f"Output: {d}")
+        def on_data(d): pass
         transport, protocol = await loop.create_datagram_endpoint(
             lambda: EgressProxy(em, on_data),
             local_addr=('127.0.0.1', local_port)
