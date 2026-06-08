@@ -141,3 +141,33 @@ The FSC engine (`fsc.py`) is a high-performance Reed-Solomon coding implementati
 
 ### 3. FFI Stability vs. Language Idioms
 Bolt prioritizes a unified telemetry output format (`⚡ Label μ=... σ=...`) across Python, C, and Rust. This ensures that architectural pipelines spanning multiple FFI boundaries can be analyzed as a single, coherent stream of execution.
+
+## 📡 The Invisible Tunnel (Bolt Proxy)
+
+The Bolt Proxy (`bolt_proxy.py`) is an asynchronous UDP-based 'Invisible Tunnel' that utilizes the FSC engine to provide high-resilience network transport.
+
+### Features
+- **Swarm Ingress**: Intercepts a data stream, encodes it into $ parity shards, and broadcasts them across the network.
+- **Swarm Egress**: Buffers incoming shards and instantly reconstructs the original block as soon as *any* $ shards arrive, effectively eliminating the impact of up to /N$ packet loss.
+- **Asynchronous Architecture**: Built on `asyncio` for high-concurrency packet handling with minimal overhead.
+
+### Usage
+```python
+# Start a 30% loss-resilient egress proxy on port 6000
+await start_proxy(6000, peer_addrs=[], K=8, N=14, mode='egress')
+```
+
+## 📡 The Invisible Tunnel (Bolt Proxy)
+
+The Bolt Proxy (`bolt_proxy.py`) is an asynchronous UDP-based 'Invisible Tunnel' that utilizes the FSC engine to provide high-resilience network transport.
+
+### Features
+- **Swarm Ingress**: Intercepts a data stream, encodes it into $N$ parity shards, and broadcasts them across the network.
+- **Swarm Egress**: Buffers incoming shards and instantly reconstructs the original block as soon as *any* $K$ shards arrive, effectively eliminating the impact of up to $(N-K)/N$ packet loss.
+- **Asynchronous Architecture**: Built on `asyncio` for high-concurrency packet handling with minimal overhead.
+
+### Usage
+```python
+# Start a 30% loss-resilient egress proxy on port 6000
+await start_proxy(6000, peer_addrs=[], K=8, N=14, mode='egress')
+```

@@ -36,7 +36,7 @@ def gf_gauss(A, b, p):
 # ── Engines ───────────────────────────────────────────────────────────
 class FSC:
     """Forward Security/Coding: Vertical Fiber Error Correction."""
-    P = 257
+    P = 251
     def __init__(self, fields=64, constraints=14):
         self.F, self.C = fields, constraints
         self.W = np.array([[pow(i + 1, j, self.P) for i in range(fields)]
@@ -68,7 +68,7 @@ class FSC:
 
 class ErasureManifold:
     """Reed-Solomon Erasure Coding: K-of-N Reconstruction."""
-    P = 257
+    P = 251
     def __init__(self, K=8, N=14):
         self.K, self.N = K, N
         self.G = np.array([[pow(i + 1, j, self.P) for j in range(K)]
