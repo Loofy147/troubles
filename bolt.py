@@ -7,55 +7,61 @@ try:
 except:pass
 _f=lambda n:f"{n}ns"if n<1e3 else f"{n/1e3:.1f}µs"if n<1e6 else f"{n/1e6:.1f}ms"if n<1e9 else f"{n/1e9:.3f}s"
 _v=lambda s: (s[1]//s[0], int(max(0,s[4]/s[0]-(s[1]/s[0])**2)**.5))
-def _e(n,v):
- if n not in _L:_L[n]=[1,v,v,v,v*v];print(f"⚡ {n}  {_f(v)}",file=_W)
+def _e(n,v,L):
+ if n not in L:L[n]=[1,v,v,v,v*v];print(f"⚡ {n}  {_f(v)}",file=_W)
  else:
-  s=_L[n];s[0]+=1;s[1]+=v;s[4]+=v*v;s[2]=min(s[2],v);s[3]=max(s[3],v);m=s[0]
+  s=L[n];s[0]+=1;s[1]+=v;s[4]+=v*v;s[2]=min(s[2],v);s[3]=max(s[3],v);m=s[0]
   if m in{2,5,10,50,100}or m%100==0:
    a,d=_v(s);print(f"⚡ {n}  ×{m}  μ={_f(a)}  σ={_f(d)}  [{_f(s[2])}…{_f(s[3])}]",file=_W)
-def _w(f,n):
+def _w(f,n,L):
  @rw(f)
- def w(*a,**k):t=_T();r=f(*a,**k);_e(n,_T()-t);return r
+ def w(*a,**k):t=_T();r=f(*a,**k);_e(n,_T()-t,L);return r
  return w
 class bolt:
- __slots__=('_l','_t')
+ __slots__=('_l','_t','_sl')
  def __new__(c,x=None,*a,**k):
+  L=getattr(c,'_L',_L)
   if _O:return x(*a,**k)if(callable(x)and(a or k))else x if callable(x)else super().__new__(c)
-  if callable(x):return _w(x,x.__name__)(*a,**k)if(a or k)else _w(x,x.__name__)
+  if callable(x):return _w(x,x.__name__,L)(*a,**k)if(a or k)else _w(x,x.__name__,L)
   return super().__new__(c)
- def __init__(s,x="block"):s._l=_P.get(x,f"layer[{x}]")if isinstance(x,int)else x
+ def __init__(s,x="block"):
+  c=s.__class__;s._sl=getattr(c,'_L',_L);P=getattr(c,'_P',_P)
+  s._l=P.get(x,f"layer[{x}]")if isinstance(x,int)else x
  __class_getitem__=lambda c,i:c(i)
- def __call__(s,f):return f if _O else _w(f,s._l)
+ def __call__(s,f):return f if _O else _w(f,s._l,s._sl)
  def __enter__(s):
   if not _O:s._t=_T()
   return s
  def __exit__(s,*_):
-  if not _O:_e(s._l,_T()-s._t)
- @staticmethod
- def register(*l):
+  if not _O:_e(s._l,_T()-s._t,s._sl)
+ @classmethod
+ def register(c,*l):
+  P=getattr(c,'_P',_P)
   if l:
-   if isinstance(l[0],dict):_P.update(l[0])
+   if isinstance(l[0],dict):P.update(l[0])
    else:
-    for i,n in(l if isinstance(l[0],(list,tuple))else enumerate(l)):_P[i]=n
- @staticmethod
- def deep(f,*a,**k):
+    for i,n in(l if isinstance(l[0],(list,tuple))else enumerate(l)):P[i]=n
+ @classmethod
+ def deep(c,f,*a,**k):
   if _O:return f(*a,**k)
   p=cp.Profile();r=p.runcall(f,*a,**k);s=io.StringIO();ps.Stats(p,stream=s).strip_dirs().sort_stats('cumtime').print_stats(8);print(s.getvalue(),file=_W);return r
- @staticmethod
- def stats(n=None):
-  for k,s in({n:_L[n]}if n and n in _L else _L if not n else {}).items():
+ @classmethod
+ def stats(c,n=None):
+  L=getattr(c,'_L',_L)
+  for k,s in({n:L[n]}if n and n in L else L if not n else {}).items():
    a,d=_v(s);print(f"{k:20s} n={s[0]:>5}  μ={_f(a)}  σ={_f(d)}  min={_f(s[2])}  max={_f(s[3])}  total={_f(s[1])}")
- @staticmethod
- def pipeline():
-  v={n:l[1]//l[0]for n,l in _L.items()if n in _P.values()};t,c=sum(v.values())or 1,0;print("── pipeline ──",file=_W)
-  for i in sorted(_P):
-   n=_P[i];s=_L.get(n)
+ @classmethod
+ def pipeline(c):
+  L,P=getattr(c,'_L',_L),getattr(c,'_P',_P)
+  v={n:l[1]//l[0]for n,l in L.items()if n in P.values()};t,cum=sum(v.values())or 1,0;print("── pipeline ──",file=_W)
+  for i in sorted(P):
+   n=P[i];s=L.get(n)
    if s:
-    a,d=_v(s);c+=a;print(f"  [{i:2d}] {n:20s}  μ={_f(a)}  σ={_f(d)}  {100*a//t:2d}%  cum={_f(c)}",file=_W)
+    a,d=_v(s);cum+=a;print(f"  [{i:2d}] {n:20s}  μ={_f(a)}  σ={_f(d)}  {100*a//t:2d}%  cum={_f(cum)}",file=_W)
    else:print(f"  [{i:2d}] {n:20s}  —",file=_W)
- @staticmethod
- def top(n=5):
-  for k,s in sorted(_L.items(),key=lambda x:-x[1][1]//x[1][0])[:n]:a,d=_v(s);print(f"🔥 {k:20s}  μ={_f(a)}  σ={_f(d)}  n={s[0]}",file=_W)
- reset=staticmethod(lambda:_L.clear())
-if __name__=="__main__":
- if len(sys.argv)>1:t=_T();sp.run(sys.argv[1:]);_e("run",_T()-t)
+ @classmethod
+ def top(c,n=5):
+  L=getattr(c,'_L',_L)
+  for k,s in sorted(L.items(),key=lambda x:-x[1][1]//x[1][0])[:n]:a,d=_v(s);print(f"🔥 {k:20s}  μ={_f(a)}  σ={_f(d)}  n={s[0]}",file=_W)
+ @classmethod
+ def reset(c):getattr(c,'_L',_L).clear()

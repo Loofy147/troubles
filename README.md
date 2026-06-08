@@ -6,43 +6,43 @@ Performance-obsessed, ultra-compact profiling toolkit for Python, C, and Rust.
 
 - **Multi-Language**: Native high-performance implementations for Python, C, and Rust.
 - **Zero-Latency Bypass**: Production modes for near-zero runtime overhead.
+- **Architectural Mapping**: Maps bottlenecks to system layers via `bolt.register()`.
+- **Cloned Isolation**: Independent state management for cloned or nested utility usage.
 - **High-Precision Stats**: Mean (μ) and Standard Deviation (σ) with nanosecond resolution.
-- **Constant Memory**: Tracks millions of events in O(1) space per label.
-- **Cross-Language Monitoring**: Integrated stack profiling (Python -> C -> Rust).
 
-## Integrated Stack Benchmarks (0^6$ iterations)
-
-| Layer | Language | μ (Integrated) | σ (Integrated) |
-|-------|----------|----------------|----------------|
-| Bridge| Python   | ~1.4µs         | ~1.4µs         |
-| FFI   | C        | ~231ns         | ~522ns         |
-| Core  | Rust     | ~30ns          | ~181ns         |
-
-*The integrated results show the "stack tax" across language boundaries, proving Bolt's stability in high-frequency FFI scenarios.*
-
-## Python Usage
+## Python
 ```python
 from bolt import bolt
-with bolt("logic"):
+bolt.register("db", "logic")
+
+with bolt[0]: # architectural layer
     ...
-bolt.stats()
+
+@bolt("custom") # labeled decorator
+def fn(): ...
+
+bolt.pipeline() # bottleneck report
+bolt.stats()     # global summary
 ```
 
-## C Usage (Header-only)
-```c
-#include "bolt.h"
-BOLT("io", { read_file(); });
-BOLT_STATS();
+## Nested & Cloned Usage
+Bolt ⚡ supports independent isolation if the module is cloned. This allows nested profiling without state collision:
+```python
+import bolt, bolt_copy
+@bolt.bolt("outer")
+@bolt_copy.bolt("inner")
+def task(): ...
 ```
 
-## Rust Usage
-```rust
-use bolt::bolt;
-bolt!("compute", { matrix_multiply(); });
-bolt::stats();
-```
+## Design & Benchmarks
 
-## Production Bypass
+| Language | Overhead/Call | Footprint | Memory |
+|----------|---------------|-----------|--------|
+| Python   | ~1.6µs        | ~3KB      | O(1)   |
+| C        | ~26ns         | Header    | O(1)   |
+| Rust     | ~30ns         | Module    | O(1)   |
+
+### Production Bypass
 - **Python**: `BOLT_OFF=1`
 - **C**: `#define BOLT_OFF`
 - **Rust**: `#[cfg(feature = "bolt_off")]`
