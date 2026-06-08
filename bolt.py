@@ -7,6 +7,27 @@ try:
 except:pass
 _f=lambda n:f"{n}ns"if n<1e3 else f"{n/1e3:.1f}µs"if n<1e6 else f"{n/1e6:.1f}ms"if n<1e9 else f"{n/1e9:.3f}s"
 _v=lambda s:(s[1]//s[0],int(max(0,s[4]/s[0]-(s[1]/s[0])**2)**.5))
+def _e(n,v,L):
+ try:
+  s=L[n]
+  s[0]+=1;s[1]+=v;s[4]+=v*v
+  if v<s[2]:s[2]=v
+  if v>s[3]:s[3]=v
+ except KeyError:L[n]=[1,v,v,v,v*v];print(f"⚡ {n}  {_f(v)}",file=_W)
+def _w(f,n,L):
+ if n not in L:L[n]=[0,0,2**63,0,0]
+ s=L[n]
+ @rw(f)
+ def w(*a,**k):
+  t=_T();r=f(*a,**k);v=_T()-t
+  if not s[0]:print(f"⚡ {n}  {_f(v)}",file=_W)
+  s[0]+=1;s[1]+=v;s[4]+=v*v
+  if v<s[2]:s[2]=v
+  if v>s[3]:s[3]=v
+  return r
+ return w
+class bolt:
+ __slots__=('_l','_t','_sl','_s')
 class bolt:
  __slots__=('_l','_t','_sl')
  _S={"n":0,"e":0,"r":0,"t":150,"b":False,"T":0}
@@ -21,6 +42,18 @@ class bolt:
  __class_getitem__=lambda c,i:c(i)
  def __call__(s,f):return f if (_O or s._S["b"]) else s._w(f,s._l,s._sl)
  def __enter__(s):
+  if not _O:
+   s._t=_T()
+   if s._l not in s._sl:s._sl[s._l]=[0,0,2**63,0,0]
+   s._s=s._sl[s._l]
+  return s
+ def __exit__(s,*_):
+  if not _O:
+   v,st=_T()-s._t,s._s
+   if not st[0]:print(f"⚡ {s._l}  {_f(v)}",file=_W)
+   st[0]+=1;st[1]+=v;st[4]+=v*v
+   if v<st[2]:st[2]=v
+   if v>st[3]:st[3]=v
   if not (_O or s._S["b"]):s._t=_T()
   return s
  def __exit__(s,*_):

@@ -13,6 +13,8 @@
 typedef struct{char n[32];long c,t,m,x;double s;} _B;static _B _l[128];static int _n=0;
 static long _gn=0,_ge=0,_gt=50,_gT=0;static double _gr=0;static int _gb=0;
 static inline void _e(const char* n,long v){
+ unsigned int h=0;const char* p=n;while(*p)h=h*33+*p++;int i=h&127,o=i;
+ while(_l[i].n[0]&&strcmp(_l[i].n,n)){i=(i+1)&127;if(i==o)return;}
  if(_gb)return;_gn++;_gT+=v;
  if(_ge&&_gn>=_ge){memset(_l,0,sizeof(_l));_gn=0;_gT=0;_n=0;printf("⚡ Bolt Epoch Reset\n");}
  if(_gr&&_gn%1000==0){long o=_gn*_gt;if((double)o/(o+_gT)>_gr){_gb=1;printf("⚡ Bolt Tripwire\n");}}

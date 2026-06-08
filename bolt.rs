@@ -51,9 +51,12 @@ impl Drop for BoltGuard {
         }
 
         let mut l = _log().lock().unwrap();
-        let e = l.entry(self.0.clone()).or_insert(_E { n: 0, t: 0, m: v, x: v, s: 0.0 });
-        e.n += 1; e.t += v; e.s += (v as f64).powi(2);
-        if v < e.m { e.m = v } if v > e.x { e.x = v }
+        if let Some(e) = l.get_mut(&self.0) {
+            e.n += 1; e.t += v; e.s += (v as f64).powi(2);
+            if v < e.m { e.m = v } if v > e.x { e.x = v }
+        } else {
+            l.insert(self.0.clone(), _E { n: 1, t: v, m: v, x: v, s: (v as f64).powi(2) });
+        }
     }
 }
 
