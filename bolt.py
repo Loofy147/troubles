@@ -34,7 +34,7 @@ class bolt:
    L.clear();s["n"]=s["T"]=0;print("⚡ Bolt Epoch Reset",file=_W)
   if s["r"] and s["n"]%1000==0:
    o=s["n"]*s["t"]
-   if o/(o+s["T"])>s["r"]:s["b"]=True;print(f"⚠️ [bolt.TRIPWIRE] '{n}' overhead exceeded {s['r']*100:.1f}%. Telemetry disengaged.",file=_W)
+   if o/(o+s["T"] or 1)>s["r"]:s["b"]=True;print(f"⚠️ [bolt.TRIPWIRE] '{n}' overhead exceeded {s['r']*100:.1f}%. Telemetry disengaged.",file=_W)
   try:
    st=L[n]
    st[0]+=1;st[1]+=v;st[4]+=v*v
