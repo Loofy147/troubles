@@ -27,6 +27,7 @@ class BoltMiner:
             line = json.dumps({"id": id, "method": method, "params": params}) + "\n"
             self.writer.write(line.encode())
             await self.writer.drain()
+            print(f">>> {line.strip()}")
         except: pass
 
     async def run(self):
@@ -43,13 +44,14 @@ class BoltMiner:
                     ctx.verify_mode = ssl.CERT_NONE
 
                 self.reader, self.writer = await asyncio.open_connection(host, port, ssl=ctx)
-                print("📡 Connection established. Subscribing...")
-                await self.send("mining.subscribe", [])
+                print("📡 Connection established.")
+                await self.send("mining.subscribe", [], 1)
 
             while True:
                 line = await self.reader.readline()
                 if not line: break
                 msg = json.loads(line)
+                print(f"<<< {line.decode().strip()}")
 
                 if "method" in msg:
                     if msg["method"] == "mining.notify":
@@ -58,29 +60,21 @@ class BoltMiner:
                     elif msg["method"] == "mining.set_difficulty":
                         diff = msg["params"][0] or 1
                         self.target = int(0x00000000FFFF000000000000000000000000000000000000000000000000 // diff)
-                        print(f"🎯 Difficulty: {diff}")
+                        print(f"🎯 Target updated: {self.target:064x}")
                     elif msg["method"] == "mining.set_extranonce":
                         self.extranonce1 = msg["params"][0]
                         self.extranonce2_size = msg["params"][1]
-                        print(f"📡 Extranonce set: {self.extranonce1}")
                 elif msg.get("id") == 1:
                     res = msg.get("result")
                     if res:
-                        # Handle varied response formats
-                        if isinstance(res[0], list) and len(res[0]) > 0 and isinstance(res[0][0], list):
-                            # [[["mining.set_difficulty", "deadbeef"], ...], "extranonce1", extranonce2_size]
-                            self.extranonce1 = res[1]
-                            self.extranonce2_size = res[2]
-                        else:
-                            # ["extranonce1", extranonce2_size] or similar
-                            self.extranonce1 = res[1] if len(res) > 1 else ""
-                            self.extranonce2_size = res[2] if len(res) > 2 else 4
-                        print(f"📡 Subscribed. Extranonce1: {self.extranonce1}")
-                        await self.send("mining.authorize", [self.worker, self.password], 2)
-                elif msg.get("id") == 2:
+                        self.extranonce1 = res[1]
+                        self.extranonce2_size = res[2]
+                        await self.send("mining.suggest_difficulty", [1.0], 2)
+                        await self.send("mining.authorize", [self.worker, self.password], 3)
+                elif msg.get("id") == 3:
                     print(f"🔐 Authorized: {msg.get('result')}")
                 elif msg.get("id") == 4:
-                    print(f"✅ Share Response: {msg.get('result') or msg.get('error')}")
+                    print(f"✅ Share Accepted: {msg.get('result')}")
         except Exception as e:
             print(f"⚠️ Error: {e}")
 
@@ -99,15 +93,15 @@ class BoltMiner:
                         binascii.unhexlify(ntime)[::-1] + \
                         binascii.unhexlify(nbits)[::-1]
 
-            print(f"⚒️  Job {job_id} | Target: {self.target:064x}")
+            print(f"⚒️  Mining {job_id}...")
             for n_base in range(0, 0xffffffff, 5000):
-                await asyncio.sleep(0.01)
+                await asyncio.sleep(0.005)
                 with bolt[22]:
                     for n in range(n_base, n_base + 5000):
                         header = h_fix + struct.pack("<I", n)
                         h = sha256d(header)[::-1]
                         if int.from_bytes(h, "big") < self.target:
-                            print(f"⚡ Found! Nonce: {n:08x}")
+                            print(f"⚡ Share Found! Nonce: {n:08x}")
                             with bolt[23]:
                                 await self.send("mining.submit", [self.worker, job_id, en2, ntime, f"{n:08x}"], 4)
                             return
