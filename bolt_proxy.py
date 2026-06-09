@@ -86,3 +86,11 @@ async def start_proxy(local_port, peer_addrs, K=8, N=14, mode='ingress'):
             local_addr=('127.0.0.1', local_port)
         )
     return transport, protocol
+
+def start_native_swarm(local_port, k, n, mode='egress'):
+    from fsc_rust import start_native_proxy
+    start_native_proxy(local_port, k, n, mode)
+
+def show_native_telemetry():
+    from fsc_rust import print_native_stats
+    print_native_stats()

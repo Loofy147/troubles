@@ -38,6 +38,19 @@ class RustFSC:
                 ctypes.POINTER(ctypes.c_uint8)  # out
             ]
             cls._lib.fsc_vertical_encode.restype = None
+
+            cls._lib.start_native_proxy.argtypes = [
+                ctypes.c_uint16,
+                ctypes.c_size_t,
+                ctypes.c_size_t,
+                ctypes.c_int32,
+                ctypes.POINTER(ctypes.c_char_p),
+                ctypes.c_size_t
+            ]
+            cls._lib.start_native_proxy.restype = None
+
+            cls._lib.get_native_bolt_stats.argtypes = []
+            cls._lib.get_native_bolt_stats.restype = None
         return cls._lib
 
 def gf_gauss_rust(A, b, p=251):
@@ -71,3 +84,18 @@ def vertical_encode_rust_opt(G, data_buffer, k, n, payload_len):
     out_ptr = out_data.ctypes.data_as(ctypes.POINTER(ctypes.c_uint8))
     lib.fsc_vertical_encode(g_ptr, data_ptr, k, n, payload_len, out_ptr)
     return out_data
+
+def start_native_proxy(port, k, n, mode='egress', peers=None):
+    lib = RustFSC.load()
+    m = 0 if mode == 'egress' else 1
+    p_ptr = None
+    p_count = 0
+    if peers:
+        p_count = len(peers)
+        p_ptr = (ctypes.c_char_p * p_count)(*[p.encode('utf-8') for p in peers])
+    lib.start_native_proxy(port, k, n, m, p_ptr, p_count)
+
+def print_native_stats():
+    lib = RustFSC.load()
+    print("\n── native data plane ──")
+    lib.get_native_bolt_stats()
