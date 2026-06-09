@@ -6,14 +6,12 @@ async def mock_pool(reader, writer):
     try:
         # 1. Subscribe
         line = await reader.readline()
-        print(f"🧊 Mock Pool: Received {line.decode().strip()}")
         writer.write((json.dumps({"id": 1, "result": [None, "01234567", 4], "error": None}) + "\n").encode())
         await writer.drain()
 
         # 2. Authorize
         line = await reader.readline()
-        print(f"🧊 Mock Pool: Received {line.decode().strip()}")
-        writer.write((json.dumps({"id": 2, "result": True, "error": None}) + "\n").encode())
+        writer.write((json.dumps({"id": 3, "result": True, "error": None}) + "\n").encode())
         await writer.drain()
 
         # 3. Set Difficulty (impossible for instant share)
@@ -42,19 +40,11 @@ async def mock_pool(reader, writer):
 
 async def main():
     server = await asyncio.start_server(mock_pool, '127.0.0.1', 3333)
-    print("🧊 Mock Pool: Started on 127.0.0.1:3333")
-
     miner = BoltMiner("stratum+tcp://127.0.0.1:3333", "Hich101.001")
     try:
-        await asyncio.wait_for(miner.run(), timeout=10)
-    except asyncio.TimeoutError:
-        print("❌ Test FAILED: Timeout waiting for share submission.")
-        sys.exit(1)
-    except SystemExit:
-        pass
-    except Exception as e:
-        print(f"❌ Test ERROR: {e}")
-        sys.exit(1)
+        await asyncio.wait_for(miner.run(), timeout=5)
+    except SystemExit: pass
+    except Exception as e: print(f"❌ Test ERROR: {e}"); sys.exit(1)
 
 if __name__ == "__main__":
     asyncio.run(main())
